@@ -74,6 +74,7 @@ import org.apache.beam.sdk.coders.Coder;
 import org.apache.beam.sdk.coders.IterableCoder;
 import org.apache.beam.sdk.extensions.gcp.options.GcpOptions;
 import org.apache.beam.sdk.io.Read;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryOptions;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.StreamingOptions;
 import org.apache.beam.sdk.runners.AppliedPTransform;
@@ -428,6 +429,18 @@ public class DataflowPipelineTranslator {
       }
       if (options.getDataflowKmsKey() != null) {
         environment.setServiceKmsKeyName(options.getDataflowKmsKey());
+      }
+
+      if (options.isStreaming()) {
+        BigQueryOptions bq = options.as(BigQueryOptions.class);
+        if (bq.getNumStreamingKeys() == 0) {
+          // If number of streaming keys is un-set, auto adjust relevant values to increase
+          // parallelism and batching for BigQuery inserts.
+          bq.setNumStreamingKeys(Math.max(options.getMaxNumWorkers() * 4, 50));
+          bq.setInsertBundleParallelism(100);
+          bq.setMaxStreamingRowsToBatch(2000L);
+          bq.setMaxStreamingBatchSize(1024L * 1024L);
+        }
       }
 
       pipeline.traverseTopologically(this);

@@ -55,7 +55,7 @@ public interface BigQueryOptions
   void setInsertBundleParallelism(Integer parallelism);
 
   @Description("The number of keys used per table when doing streaming inserts to BigQuery.")
-  @Default.Integer(50)
+  @Default.Integer(0)
   Integer getNumStreamingKeys();
 
   void setNumStreamingKeys(Integer value);
