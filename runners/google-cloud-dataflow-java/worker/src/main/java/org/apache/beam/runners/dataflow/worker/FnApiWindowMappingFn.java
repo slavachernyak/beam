@@ -17,14 +17,13 @@
  */
 package org.apache.beam.runners.dataflow.worker;
 
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkState;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkState;
 
 import com.google.auto.value.AutoValue;
 import java.io.IOException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
-import org.apache.beam.model.fnexecution.v1.BeamFnApi;
 import org.apache.beam.model.fnexecution.v1.BeamFnApi.InstructionRequest;
 import org.apache.beam.model.fnexecution.v1.BeamFnApi.InstructionResponse;
 import org.apache.beam.model.fnexecution.v1.BeamFnApi.ProcessBundleDescriptor;
@@ -57,9 +56,8 @@ import org.apache.beam.sdk.util.MoreFutures;
 import org.apache.beam.sdk.util.WindowedValue;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.WindowingStrategy;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Strings;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.cache.Cache;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.cache.CacheBuilder;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.cache.Cache;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.cache.CacheBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -229,7 +227,7 @@ class FnApiWindowMappingFn<TargetWindowT extends BoundedWindow>
               .setInstructionId(processRequestInstructionId)
               .setProcessBundle(
                   ProcessBundleRequest.newBuilder()
-                      .setProcessBundleDescriptorReference(registerIfRequired()))
+                      .setProcessBundleDescriptorId(registerIfRequired()))
               .build();
 
       ConcurrentLinkedQueue<WindowedValue<KV<byte[], TargetWindowT>>> outputValue =
@@ -238,12 +236,7 @@ class FnApiWindowMappingFn<TargetWindowT extends BoundedWindow>
       // Open the inbound consumer
       InboundDataClient waitForInboundTermination =
           beamFnDataService.receive(
-              LogicalEndpoint.of(
-                  processRequestInstructionId,
-                  BeamFnApi.Target.newBuilder()
-                      .setName("out")
-                      .setPrimitiveTransformReference("write")
-                      .build()),
+              LogicalEndpoint.of(processRequestInstructionId, "write"),
               inboundCoder,
               outputValue::add);
 
@@ -253,19 +246,13 @@ class FnApiWindowMappingFn<TargetWindowT extends BoundedWindow>
       // Open the outbound consumer
       try (CloseableFnDataReceiver<WindowedValue<KV<byte[], BoundedWindow>>> outboundConsumer =
           beamFnDataService.send(
-              LogicalEndpoint.of(
-                  processRequestInstructionId,
-                  BeamFnApi.Target.newBuilder()
-                      .setName("in")
-                      .setPrimitiveTransformReference("read")
-                      .build()),
-              outboundCoder)) {
+              LogicalEndpoint.of(processRequestInstructionId, "read"), outboundCoder)) {
 
         outboundConsumer.accept(WindowedValue.valueInGlobalWindow(KV.of(EMPTY_ARRAY, mainWindow)));
       }
 
       // Check to see if processing the request failed.
-      throwIfFailure(processResponse);
+      MoreFutures.get(processResponse);
 
       waitForInboundTermination.awaitCompletion();
       WindowedValue<KV<byte[], TargetWindowT>> sideInputWindow = outputValue.poll();
@@ -312,22 +299,10 @@ class FnApiWindowMappingFn<TargetWindowT extends BoundedWindow>
                               processBundleDescriptor.toBuilder().setId(descriptorId).build())
                           .build())
                   .build());
-      throwIfFailure(response);
+      // Check if the bundle descriptor is registered successfully.
+      MoreFutures.get(response);
       processBundleDescriptorId = descriptorId;
     }
     return processBundleDescriptorId;
-  }
-
-  private static InstructionResponse throwIfFailure(
-      CompletionStage<InstructionResponse> responseFuture)
-      throws ExecutionException, InterruptedException {
-    InstructionResponse response = MoreFutures.get(responseFuture);
-    if (!Strings.isNullOrEmpty(response.getError())) {
-      throw new IllegalStateException(
-          String.format(
-              "Client failed to process %s with error [%s].",
-              response.getInstructionId(), response.getError()));
-    }
-    return response;
   }
 }

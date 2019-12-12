@@ -24,6 +24,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.beam.model.pipeline.v1.RunnerApi;
 import org.apache.beam.runners.core.DoFnRunner;
 import org.apache.beam.runners.core.DoFnRunners;
@@ -32,15 +34,15 @@ import org.apache.beam.runners.core.SideInputHandler;
 import org.apache.beam.runners.core.SimplePushbackSideInputDoFnRunner;
 import org.apache.beam.runners.core.StateNamespace;
 import org.apache.beam.runners.core.StateNamespaces;
+import org.apache.beam.runners.core.StateTags;
 import org.apache.beam.runners.core.TimerInternals;
-import org.apache.beam.runners.core.construction.SerializablePipelineOptions;
 import org.apache.beam.runners.core.construction.graph.ExecutableStage;
-import org.apache.beam.runners.core.serialization.Base64Serializer;
 import org.apache.beam.runners.fnexecution.control.StageBundleFactory;
 import org.apache.beam.runners.samza.SamzaExecutionContext;
 import org.apache.beam.runners.samza.SamzaPipelineOptions;
 import org.apache.beam.sdk.coders.Coder;
-import org.apache.beam.sdk.coders.VoidCoder;
+import org.apache.beam.sdk.state.BagState;
+import org.apache.beam.sdk.state.TimeDomain;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.DoFnSchemaInformation;
 import org.apache.beam.sdk.transforms.join.RawUnionValue;
@@ -50,14 +52,15 @@ import org.apache.beam.sdk.transforms.reflect.DoFnSignature;
 import org.apache.beam.sdk.transforms.reflect.DoFnSignatures;
 import org.apache.beam.sdk.transforms.windowing.BoundedWindow;
 import org.apache.beam.sdk.util.WindowedValue;
+import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.sdk.values.TupleTag;
 import org.apache.beam.sdk.values.WindowingStrategy;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterators;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Iterators;
 import org.apache.samza.config.Config;
-import org.apache.samza.operators.TimerRegistry;
-import org.apache.samza.storage.kv.KeyValueStore;
-import org.apache.samza.task.TaskContext;
+import org.apache.samza.context.Context;
+import org.apache.samza.operators.Scheduler;
+import org.joda.time.Duration;
 import org.joda.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,6 +68,7 @@ import org.slf4j.LoggerFactory;
 /** Samza operator for {@link DoFn}. */
 public class DoFnOp<InT, FnOutT, OutT> implements Op<InT, OutT, Void> {
   private static final Logger LOG = LoggerFactory.getLogger(DoFnOp.class);
+  private static final long MIN_BUNDLE_CHECK_TIME_MS = 10L;
 
   private final TupleTag<FnOutT> mainOutputTag;
   private final DoFn<InT, FnOutT> doFn;
@@ -75,9 +79,14 @@ public class DoFnOp<InT, FnOutT, OutT> implements Op<InT, OutT, Void> {
   private final OutputManagerFactory<OutT> outputManagerFactory;
   // NOTE: we use HashMap here to guarantee Serializability
   private final HashMap<String, PCollectionView<?>> idToViewMap;
-  private final String stepName;
+  private final String transformFullName;
+  private final String transformId;
   private final Coder<InT> inputCoder;
+  private final Coder<WindowedValue<InT>> windowedValueCoder;
   private final HashMap<TupleTag<?>, Coder<?>> outputCoders;
+  private final PCollection.IsBounded isBounded;
+  private final String bundleCheckTimerId;
+  private final String bundleStateId;
 
   // portable api related
   private final boolean isPortable;
@@ -89,6 +98,7 @@ public class DoFnOp<InT, FnOutT, OutT> implements Op<InT, OutT, Void> {
   private transient PushbackSideInputDoFnRunner<InT, FnOutT> pushbackFnRunner;
   private transient SideInputHandler sideInputHandler;
   private transient DoFnInvoker<InT, FnOutT> doFnInvoker;
+  private transient SamzaPipelineOptions samzaPipelineOptions;
 
   // This is derivable from pushbackValues which is persisted to a store.
   // TODO: eagerly initialize the hold in init
@@ -99,87 +109,131 @@ public class DoFnOp<InT, FnOutT, OutT> implements Op<InT, OutT, Void> {
 
   // TODO: add this to checkpointable state
   private transient Instant inputWatermark;
+  private transient Instant bundleWatermarkHold;
   private transient Instant sideInputWatermark;
   private transient List<WindowedValue<InT>> pushbackValues;
   private transient StageBundleFactory stageBundleFactory;
+  private transient long maxBundleSize;
+  private transient long maxBundleTimeMs;
+  private transient AtomicLong currentBundleElementCount;
+  private transient AtomicLong bundleStartTime;
+  private transient AtomicBoolean isBundleStarted;
+  private transient Scheduler<KeyedTimerData<Void>> bundleTimerScheduler;
   private DoFnSchemaInformation doFnSchemaInformation;
+  private Map<String, PCollectionView<?>> sideInputMapping;
 
   public DoFnOp(
       TupleTag<FnOutT> mainOutputTag,
       DoFn<InT, FnOutT> doFn,
       Coder<?> keyCoder,
       Coder<InT> inputCoder,
+      Coder<WindowedValue<InT>> windowedValueCoder,
       Map<TupleTag<?>, Coder<?>> outputCoders,
       Collection<PCollectionView<?>> sideInputs,
       List<TupleTag<?>> sideOutputTags,
       WindowingStrategy windowingStrategy,
       Map<String, PCollectionView<?>> idToViewMap,
       OutputManagerFactory<OutT> outputManagerFactory,
-      String stepName,
+      String transformFullName,
+      String transformId,
+      PCollection.IsBounded isBounded,
       boolean isPortable,
       RunnerApi.ExecutableStagePayload stagePayload,
       Map<String, TupleTag<?>> idToTupleTagMap,
-      DoFnSchemaInformation doFnSchemaInformation) {
+      DoFnSchemaInformation doFnSchemaInformation,
+      Map<String, PCollectionView<?>> sideInputMapping) {
     this.mainOutputTag = mainOutputTag;
     this.doFn = doFn;
     this.sideInputs = sideInputs;
     this.sideOutputTags = sideOutputTags;
     this.inputCoder = inputCoder;
+    this.windowedValueCoder = windowedValueCoder;
     this.outputCoders = new HashMap<>(outputCoders);
     this.windowingStrategy = windowingStrategy;
     this.idToViewMap = new HashMap<>(idToViewMap);
     this.outputManagerFactory = outputManagerFactory;
-    this.stepName = stepName;
+    this.transformFullName = transformFullName;
+    this.transformId = transformId;
     this.keyCoder = keyCoder;
+    this.isBounded = isBounded;
     this.isPortable = isPortable;
     this.stagePayload = stagePayload;
     this.idToTupleTagMap = new HashMap<>(idToTupleTagMap);
+    this.bundleCheckTimerId = "_samza_bundle_check_" + transformId;
+    this.bundleStateId = "_samza_bundle_" + transformId;
     this.doFnSchemaInformation = doFnSchemaInformation;
+    this.sideInputMapping = sideInputMapping;
   }
 
   @Override
   public void open(
       Config config,
-      TaskContext context,
-      TimerRegistry<TimerKey<Void>> timerRegistry,
+      Context context,
+      Scheduler<KeyedTimerData<Void>> timerRegistry,
       OpEmitter<OutT> emitter) {
     this.inputWatermark = BoundedWindow.TIMESTAMP_MIN_VALUE;
     this.sideInputWatermark = BoundedWindow.TIMESTAMP_MIN_VALUE;
     this.pushbackWatermarkHold = BoundedWindow.TIMESTAMP_MAX_VALUE;
-    this.timerInternalsFactory = new SamzaTimerInternalsFactory(keyCoder, timerRegistry);
+    this.currentBundleElementCount = new AtomicLong(0L);
+    this.bundleStartTime = new AtomicLong(Long.MAX_VALUE);
+    this.isBundleStarted = new AtomicBoolean(false);
+    this.bundleWatermarkHold = null;
 
     final DoFnSignature signature = DoFnSignatures.getSignature(doFn.getClass());
-    final SamzaPipelineOptions pipelineOptions =
-        Base64Serializer.deserializeUnchecked(
-                config.get("beamPipelineOptions"), SerializablePipelineOptions.class)
-            .get()
-            .as(SamzaPipelineOptions.class);
+    final SamzaExecutionContext samzaExecutionContext =
+        (SamzaExecutionContext) context.getApplicationContainerContext();
+    this.samzaPipelineOptions = samzaExecutionContext.getPipelineOptions();
+    this.maxBundleSize = samzaPipelineOptions.getMaxBundleSize();
+    this.maxBundleTimeMs = samzaPipelineOptions.getMaxBundleTimeMs();
+    this.bundleTimerScheduler = timerRegistry;
+
+    if (this.maxBundleSize > 1) {
+      scheduleNextBundleCheck();
+    }
 
     final SamzaStoreStateInternals.Factory<?> nonKeyedStateInternalsFactory =
-        createStateInternalFactory(null, context, pipelineOptions, signature, mainOutputTag);
+        SamzaStoreStateInternals.createStateInternalFactory(
+            transformId, null, context.getTaskContext(), samzaPipelineOptions, signature);
+
+    this.timerInternalsFactory =
+        SamzaTimerInternalsFactory.createTimerInternalFactory(
+            keyCoder,
+            (Scheduler) timerRegistry,
+            getTimerStateId(signature),
+            nonKeyedStateInternalsFactory,
+            windowingStrategy,
+            isBounded,
+            samzaPipelineOptions);
+
     this.sideInputHandler =
         new SideInputHandler(sideInputs, nonKeyedStateInternalsFactory.stateInternalsForKey(null));
 
     if (isPortable) {
-      SamzaExecutionContext samzaExecutionContext =
-          (SamzaExecutionContext) context.getUserContext();
-      ExecutableStage executableStage = ExecutableStage.fromPayload(stagePayload);
+      // storing events within a bundle in states
+      final BagState<WindowedValue<InT>> bundledEventsBagState =
+          nonKeyedStateInternalsFactory
+              .stateInternalsForKey(null)
+              .state(StateNamespaces.global(), StateTags.bag(bundleStateId, windowedValueCoder));
+      final ExecutableStage executableStage = ExecutableStage.fromPayload(stagePayload);
       stageBundleFactory = samzaExecutionContext.getJobBundleFactory().forStage(executableStage);
       this.fnRunner =
           SamzaDoFnRunners.createPortable(
+              samzaPipelineOptions,
+              bundledEventsBagState,
               outputManagerFactory.create(emitter),
               stageBundleFactory,
               mainOutputTag,
               idToTupleTagMap,
               context,
-              stepName);
+              transformFullName);
     } else {
       this.fnRunner =
           SamzaDoFnRunners.create(
-              pipelineOptions,
+              samzaPipelineOptions,
               doFn,
               windowingStrategy,
-              stepName,
+              transformFullName,
+              transformId,
               context,
               mainOutputTag,
               sideInputHandler,
@@ -189,7 +243,8 @@ public class DoFnOp<InT, FnOutT, OutT> implements Op<InT, OutT, Void> {
               inputCoder,
               sideOutputTags,
               outputCoders,
-              doFnSchemaInformation);
+              doFnSchemaInformation,
+              sideInputMapping);
     }
 
     this.pushbackFnRunner =
@@ -208,39 +263,66 @@ public class DoFnOp<InT, FnOutT, OutT> implements Op<InT, OutT, Void> {
     doFnInvoker.invokeSetup();
   }
 
-  static SamzaStoreStateInternals.Factory createStateInternalFactory(
-      Coder<?> keyCoder,
-      TaskContext context,
-      SamzaPipelineOptions pipelineOptions,
-      DoFnSignature signature,
-      TupleTag<?> mainOutputTag) {
-    final int batchGetSize = pipelineOptions.getStoreBatchGetSize();
-    final Map<String, KeyValueStore<byte[], byte[]>> stores =
-        new HashMap<>(SamzaStoreStateInternals.getBeamStore(context));
+  /*
+   * Schedule in processing time to check whether the current bundle should be closed. Note that
+   * we only approximately achieve max bundle time by checking as frequent as half of the max bundle
+   * time set by users. This would violate the max bundle time by up to half of it but should
+   * acceptable in most cases (and cheaper than scheduling a timer at the beginning of every bundle).
+   */
+  private void scheduleNextBundleCheck() {
+    final Instant nextBundleCheckTime =
+        Instant.now().plus(Duration.millis(maxBundleTimeMs / 2 + MIN_BUNDLE_CHECK_TIME_MS));
+    final TimerInternals.TimerData timerData =
+        TimerInternals.TimerData.of(
+            bundleCheckTimerId,
+            StateNamespaces.global(),
+            nextBundleCheckTime,
+            TimeDomain.PROCESSING_TIME);
+    bundleTimerScheduler.schedule(
+        new KeyedTimerData<>(new byte[0], null, timerData), nextBundleCheckTime.getMillis());
+  }
 
-    final Coder stateKeyCoder;
-    if (keyCoder != null) {
-      signature
-          .stateDeclarations()
-          .keySet()
-          .forEach(
-              stateId ->
-                  stores.put(stateId, (KeyValueStore<byte[], byte[]>) context.getStore(stateId)));
-      stateKeyCoder = keyCoder;
-    } else {
-      stateKeyCoder = VoidCoder.of();
+  private String getTimerStateId(DoFnSignature signature) {
+    final StringBuilder builder = new StringBuilder("timer");
+    if (signature.usesTimers()) {
+      signature.timerDeclarations().keySet().forEach(key -> builder.append(key));
     }
-    return new SamzaStoreStateInternals.Factory<>(
-        // TODO: ??? what to do with empty output?
-        mainOutputTag == null ? "null" : mainOutputTag.getId(),
-        stores,
-        stateKeyCoder,
-        batchGetSize);
+    return builder.toString();
+  }
+
+  private void attemptStartBundle() {
+    if (isBundleStarted.compareAndSet(false, true)) {
+      currentBundleElementCount.set(0L);
+      bundleStartTime.set(System.currentTimeMillis());
+      pushbackFnRunner.startBundle();
+    }
+  }
+
+  private void finishBundle(OpEmitter<OutT> emitter) {
+    if (isBundleStarted.compareAndSet(true, false)) {
+      currentBundleElementCount.set(0L);
+      bundleStartTime.set(Long.MAX_VALUE);
+      pushbackFnRunner.finishBundle();
+      if (bundleWatermarkHold != null) {
+        doProcessWatermark(bundleWatermarkHold, emitter);
+      }
+      bundleWatermarkHold = null;
+    }
+  }
+
+  private void attemptFinishBundle(OpEmitter<OutT> emitter) {
+    if (!isBundleStarted.get()) {
+      return;
+    }
+    if (currentBundleElementCount.get() >= maxBundleSize
+        || System.currentTimeMillis() - bundleStartTime.get() > maxBundleTimeMs) {
+      finishBundle(emitter);
+    }
   }
 
   @Override
   public void processElement(WindowedValue<InT> inputElement, OpEmitter<OutT> emitter) {
-    pushbackFnRunner.startBundle();
+    attemptStartBundle();
 
     final Iterable<WindowedValue<InT>> rejectedValues =
         pushbackFnRunner.processElementInReadyWindows(inputElement);
@@ -251,11 +333,11 @@ public class DoFnOp<InT, FnOutT, OutT> implements Op<InT, OutT, Void> {
       pushbackValues.add(rejectedValue);
     }
 
-    pushbackFnRunner.finishBundle();
+    currentBundleElementCount.incrementAndGet();
+    attemptFinishBundle(emitter);
   }
 
-  @Override
-  public void processWatermark(Instant watermark, OpEmitter<OutT> emitter) {
+  private void doProcessWatermark(Instant watermark, OpEmitter<OutT> emitter) {
     this.inputWatermark = watermark;
 
     if (sideInputWatermark.isEqual(BoundedWindow.TIMESTAMP_MAX_VALUE)) {
@@ -278,6 +360,20 @@ public class DoFnOp<InT, FnOutT, OutT> implements Op<InT, OutT, Void> {
         || timerInternalsFactory.getOutputWatermark().isBefore(actualInputWatermark)) {
       timerInternalsFactory.setOutputWatermark(actualInputWatermark);
       emitter.emitWatermark(timerInternalsFactory.getOutputWatermark());
+    }
+  }
+
+  @Override
+  public void processWatermark(Instant watermark, OpEmitter<OutT> emitter) {
+    if (!isBundleStarted.get()) {
+      doProcessWatermark(watermark, emitter);
+    } else {
+      // if there is a bundle in progress, hold back the watermark until end of the bundle
+      this.bundleWatermarkHold = watermark;
+      if (watermark.isEqual(BoundedWindow.TIMESTAMP_MAX_VALUE)) {
+        // for batch mode, the max watermark should force the bundle to close
+        finishBundle(emitter);
+      }
     }
   }
 
@@ -318,14 +414,24 @@ public class DoFnOp<InT, FnOutT, OutT> implements Op<InT, OutT, Void> {
   }
 
   @Override
-  public void processTimer(KeyedTimerData<Void> keyedTimerData) {
+  public void processTimer(KeyedTimerData<Void> keyedTimerData, OpEmitter<OutT> emitter) {
+    // this is internal timer in processing time to check whether a bundle should be closed
+    if (bundleCheckTimerId.equals(keyedTimerData.getTimerData().getTimerId())) {
+      attemptFinishBundle(emitter);
+      scheduleNextBundleCheck();
+      return;
+    }
+
     pushbackFnRunner.startBundle();
     fireTimer(keyedTimerData);
     pushbackFnRunner.finishBundle();
+
+    this.timerInternalsFactory.removeProcessingTimer((KeyedTimerData) keyedTimerData);
   }
 
   @Override
   public void close() {
+    bundleWatermarkHold = null;
     doFnInvoker.invokeTeardown();
     try (AutoCloseable closer = stageBundleFactory) {
       // do nothing

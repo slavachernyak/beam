@@ -20,7 +20,9 @@
 from __future__ import absolute_import
 
 import re
+import sys
 from builtins import object
+from typing import Type
 
 
 class TopClass(object):
@@ -69,10 +71,19 @@ XYZ_OBJECT = Xyz()
 class RecursiveClass(object):
   """A class that contains a reference to itself."""
 
-  SELF_TYPE = None
+  SELF_TYPE = None  # type: Type[RecursiveClass]
 
   def __init__(self, datum):
     self.datum = 'RecursiveClass:%s' % datum
 
 
 RecursiveClass.SELF_TYPE = RecursiveClass
+
+# pylint: disable=exec-used
+if sys.version_info >= (3, 7):
+  # create dataclass to be pickled
+  exec('''
+from dataclasses import dataclass
+@dataclass
+class DataClass:
+  datum: str''')

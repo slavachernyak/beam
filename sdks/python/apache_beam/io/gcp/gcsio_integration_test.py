@@ -31,9 +31,9 @@ The project's Cloud Storage service account requires Encrypter/Decrypter
 permissions for the key specified in --kms_key_name.
 
 To run these tests manually:
-  ./gradlew beam-sdks-python:integrationTest \
-    -Ptests=apache_beam.io.gcp.gcsio_integration_test:GcsIOIntegrationTest \
-    -PkmsKeyName=KMS_KEY_NAME
+  ./gradlew :sdks:python:test-suites:dataflow:integrationTest \
+    -Dtests=apache_beam.io.gcp.gcsio_integration_test:GcsIOIntegrationTest \
+    -DkmsKeyName=KMS_KEY_NAME
 """
 
 from __future__ import absolute_import
@@ -50,7 +50,7 @@ from apache_beam.testing.test_pipeline import TestPipeline
 try:
   from apache_beam.io.gcp import gcsio
 except ImportError:
-  gcsio = None
+  gcsio = None  # type: ignore
 
 
 @unittest.skipIf(gcsio is None, 'GCP dependencies are not installed')

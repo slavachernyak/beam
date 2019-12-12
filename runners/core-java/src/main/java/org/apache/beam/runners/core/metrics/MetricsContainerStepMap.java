@@ -19,12 +19,13 @@ package org.apache.beam.runners.core.metrics;
 
 import static java.util.Collections.singleton;
 import static java.util.stream.Collectors.toList;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterables.concat;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Iterables.concat;
 
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiFunction;
 import org.apache.beam.model.pipeline.v1.MetricsApi.MonitoringInfo;
@@ -83,24 +84,28 @@ public class MetricsContainerStepMap implements Serializable {
     getContainer(step).update(container);
   }
 
+  /** Reset the metric containers. */
+  public void reset() {
+    for (MetricsContainerImpl metricsContainer : metricsContainers.values()) {
+      metricsContainer.reset();
+    }
+    unboundContainer.reset();
+  }
+
   @Override
-  public boolean equals(Object o) {
-    if (this == o) {
-      return true;
-    }
-    if (o == null || getClass() != o.getClass()) {
-      return false;
+  public boolean equals(Object object) {
+    if (object instanceof MetricsContainerStepMap) {
+      MetricsContainerStepMap metricsContainerStepMap = (MetricsContainerStepMap) object;
+      return Objects.equals(metricsContainers, metricsContainerStepMap.metricsContainers)
+          && Objects.equals(unboundContainer, metricsContainerStepMap.unboundContainer);
     }
 
-    MetricsContainerStepMap that = (MetricsContainerStepMap) o;
-
-    // TODO(BEAM-6546): The underlying MetricContainerImpls do not implement equals().
-    return getMetricsContainers().equals(that.getMetricsContainers());
+    return false;
   }
 
   @Override
   public int hashCode() {
-    return metricsContainers.hashCode();
+    return Objects.hash(metricsContainers, unboundContainer);
   }
 
   /**

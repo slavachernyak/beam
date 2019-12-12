@@ -19,7 +19,7 @@ package org.apache.beam.sdk.transforms;
 
 import static org.apache.beam.sdk.transforms.DoFn.ProcessContinuation.resume;
 import static org.apache.beam.sdk.transforms.DoFn.ProcessContinuation.stop;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkState;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkState;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -47,7 +47,7 @@ import org.apache.beam.sdk.testing.UsesUnboundedSplittableParDo;
 import org.apache.beam.sdk.testing.ValidatesRunner;
 import org.apache.beam.sdk.transforms.DoFn.BoundedPerElement;
 import org.apache.beam.sdk.transforms.DoFn.UnboundedPerElement;
-import org.apache.beam.sdk.transforms.splittabledofn.OffsetRangeTracker;
+import org.apache.beam.sdk.transforms.splittabledofn.RestrictionTracker;
 import org.apache.beam.sdk.transforms.windowing.FixedWindows;
 import org.apache.beam.sdk.transforms.windowing.IntervalWindow;
 import org.apache.beam.sdk.transforms.windowing.Never;
@@ -61,7 +61,7 @@ import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.sdk.values.TimestampedValue;
 import org.apache.beam.sdk.values.TupleTag;
 import org.apache.beam.sdk.values.TupleTagList;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Ordering;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Ordering;
 import org.joda.time.Duration;
 import org.joda.time.Instant;
 import org.joda.time.MutableDateTime;
@@ -80,7 +80,8 @@ public class SplittableDoFnTest implements Serializable {
 
   static class PairStringWithIndexToLengthBase extends DoFn<String, KV<String, Integer>> {
     @ProcessElement
-    public ProcessContinuation process(ProcessContext c, OffsetRangeTracker tracker) {
+    public ProcessContinuation process(
+        ProcessContext c, RestrictionTracker<OffsetRange, Long> tracker) {
       for (long i = tracker.currentRestriction().getFrom(), numIterations = 0;
           tracker.tryClaim(i);
           ++i, ++numIterations) {
@@ -238,7 +239,8 @@ public class SplittableDoFnTest implements Serializable {
     }
 
     @ProcessElement
-    public ProcessContinuation processElement(ProcessContext c, OffsetRangeTracker tracker) {
+    public ProcessContinuation processElement(
+        ProcessContext c, RestrictionTracker<OffsetRange, Long> tracker) {
       int[] blockStarts = {-1, 0, 12, 123, 1234, 12345, 34567, MAX_INDEX};
       int trueStart = snapToNextBlock((int) tracker.currentRestriction().getFrom(), blockStarts);
       for (int i = trueStart, numIterations = 1;
@@ -317,7 +319,7 @@ public class SplittableDoFnTest implements Serializable {
     }
 
     @ProcessElement
-    public void process(ProcessContext c, OffsetRangeTracker tracker) {
+    public void process(ProcessContext c, RestrictionTracker<OffsetRange, Long> tracker) {
       checkState(tracker.tryClaim(tracker.currentRestriction().getFrom()));
       String side = c.sideInput(sideInput);
       c.output(side + ":" + c.element());
@@ -449,7 +451,8 @@ public class SplittableDoFnTest implements Serializable {
     }
 
     @ProcessElement
-    public ProcessContinuation processElement(ProcessContext c, OffsetRangeTracker tracker) {
+    public ProcessContinuation processElement(
+        ProcessContext c, RestrictionTracker<OffsetRange, Long> tracker) {
       int[] blockStarts = {-1, 0, 12, 123, 1234, 12345, 34567, MAX_INDEX};
       int trueStart = snapToNextBlock((int) tracker.currentRestriction().getFrom(), blockStarts);
       for (int i = trueStart, numIterations = 1;
@@ -571,7 +574,7 @@ public class SplittableDoFnTest implements Serializable {
     }
 
     @ProcessElement
-    public void process(ProcessContext c, OffsetRangeTracker tracker) {
+    public void process(ProcessContext c, RestrictionTracker<OffsetRange, Long> tracker) {
       checkState(tracker.tryClaim(tracker.currentRestriction().getFrom()));
       c.output("main:" + c.element());
       c.output(additionalOutput, "additional:" + c.element());
@@ -712,7 +715,7 @@ public class SplittableDoFnTest implements Serializable {
     }
 
     @ProcessElement
-    public void processElement(ProcessContext c, OffsetRangeTracker tracker) {
+    public void processElement(ProcessContext c, RestrictionTracker<OffsetRange, Long> tracker) {
       assertEquals(State.INSIDE_BUNDLE, state);
       assertTrue(tracker.tryClaim(0L));
       c.output(c.element());
@@ -774,7 +777,8 @@ public class SplittableDoFnTest implements Serializable {
               ParDo.of(
                   new DoFn<String, String>() {
                     @ProcessElement
-                    public void process(@Element String element, OffsetRangeTracker tracker) {
+                    public void process(
+                        @Element String element, RestrictionTracker<OffsetRange, Long> tracker) {
                       // Doesn't matter
                     }
 
@@ -792,7 +796,7 @@ public class SplittableDoFnTest implements Serializable {
                   new DoFn<String, String>() {
                     @ProcessElement
                     public ProcessContinuation process(
-                        @Element String element, OffsetRangeTracker tracker) {
+                        @Element String element, RestrictionTracker<OffsetRange, Long> tracker) {
                       return stop();
                     }
 

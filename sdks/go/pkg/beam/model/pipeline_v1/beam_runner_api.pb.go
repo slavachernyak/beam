@@ -3,12 +3,16 @@
 
 package pipeline_v1
 
+import proto "github.com/golang/protobuf/proto"
+import fmt "fmt"
+import math "math"
+import descriptor "github.com/golang/protobuf/protoc-gen-go/descriptor"
+import any "github.com/golang/protobuf/ptypes/any"
+import _ "github.com/golang/protobuf/ptypes/timestamp"
+
 import (
-	fmt "fmt"
-	proto "github.com/golang/protobuf/proto"
-	descriptor "github.com/golang/protobuf/protoc-gen-go/descriptor"
-	any "github.com/golang/protobuf/ptypes/any"
-	math "math"
+	context "golang.org/x/net/context"
+	grpc "google.golang.org/grpc"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -43,7 +47,6 @@ var BeamConstants_Constants_name = map[int32]string{
 	1: "MAX_TIMESTAMP_MILLIS",
 	2: "GLOBAL_WINDOW_MAX_TIMESTAMP_MILLIS",
 }
-
 var BeamConstants_Constants_value = map[string]int32{
 	"MIN_TIMESTAMP_MILLIS":               0,
 	"MAX_TIMESTAMP_MILLIS":               1,
@@ -53,9 +56,8 @@ var BeamConstants_Constants_value = map[string]int32{
 func (x BeamConstants_Constants) String() string {
 	return proto.EnumName(BeamConstants_Constants_name, int32(x))
 }
-
 func (BeamConstants_Constants) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{0, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{0, 0}
 }
 
 type StandardPTransforms_Primitives int32
@@ -119,7 +121,6 @@ var StandardPTransforms_Primitives_name = map[int32]string{
 	6: "MAP_WINDOWS",
 	7: "MERGE_WINDOWS",
 }
-
 var StandardPTransforms_Primitives_value = map[string]int32{
 	"PAR_DO":         0,
 	"FLATTEN":        1,
@@ -134,9 +135,8 @@ var StandardPTransforms_Primitives_value = map[string]int32{
 func (x StandardPTransforms_Primitives) String() string {
 	return proto.EnumName(StandardPTransforms_Primitives_name, int32(x))
 }
-
 func (StandardPTransforms_Primitives) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{5, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{4, 0}
 }
 
 type StandardPTransforms_DeprecatedPrimitives int32
@@ -154,7 +154,6 @@ var StandardPTransforms_DeprecatedPrimitives_name = map[int32]string{
 	0: "READ",
 	1: "CREATE_VIEW",
 }
-
 var StandardPTransforms_DeprecatedPrimitives_value = map[string]int32{
 	"READ":        0,
 	"CREATE_VIEW": 1,
@@ -163,9 +162,8 @@ var StandardPTransforms_DeprecatedPrimitives_value = map[string]int32{
 func (x StandardPTransforms_DeprecatedPrimitives) String() string {
 	return proto.EnumName(StandardPTransforms_DeprecatedPrimitives_name, int32(x))
 }
-
 func (StandardPTransforms_DeprecatedPrimitives) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{5, 1}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{4, 1}
 }
 
 type StandardPTransforms_Composites int32
@@ -193,7 +191,6 @@ var StandardPTransforms_Composites_name = map[int32]string{
 	2: "RESHUFFLE",
 	3: "WRITE_FILES",
 }
-
 var StandardPTransforms_Composites_value = map[string]int32{
 	"COMBINE_PER_KEY":  0,
 	"COMBINE_GLOBALLY": 1,
@@ -204,66 +201,54 @@ var StandardPTransforms_Composites_value = map[string]int32{
 func (x StandardPTransforms_Composites) String() string {
 	return proto.EnumName(StandardPTransforms_Composites_name, int32(x))
 }
-
 func (StandardPTransforms_Composites) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{5, 2}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{4, 2}
 }
 
 // Payload for all of these: CombinePayload
 type StandardPTransforms_CombineComponents int32
 
 const (
-	StandardPTransforms_COMBINE_PGBKCV             StandardPTransforms_CombineComponents = 0
-	StandardPTransforms_COMBINE_MERGE_ACCUMULATORS StandardPTransforms_CombineComponents = 1
-	StandardPTransforms_COMBINE_EXTRACT_OUTPUTS    StandardPTransforms_CombineComponents = 2
 	// Represents the Pre-Combine part of a lifted Combine Per Key, as described
 	// in the following document:
 	// https://s.apache.org/beam-runner-api-combine-model#heading=h.ta0g6ase8z07
 	// Payload: CombinePayload
-	StandardPTransforms_COMBINE_PER_KEY_PRECOMBINE StandardPTransforms_CombineComponents = 3
+	StandardPTransforms_COMBINE_PER_KEY_PRECOMBINE StandardPTransforms_CombineComponents = 0
 	// Represents the Merge Accumulators part of a lifted Combine Per Key, as
 	// described in the following document:
 	// https://s.apache.org/beam-runner-api-combine-model#heading=h.jco9rvatld5m
 	// Payload: CombinePayload
-	StandardPTransforms_COMBINE_PER_KEY_MERGE_ACCUMULATORS StandardPTransforms_CombineComponents = 4
+	StandardPTransforms_COMBINE_PER_KEY_MERGE_ACCUMULATORS StandardPTransforms_CombineComponents = 1
 	// Represents the Extract Outputs part of a lifted Combine Per Key, as
 	// described in the following document:
 	// https://s.apache.org/beam-runner-api-combine-model#heading=h.i9i6p8gtl6ku
 	// Payload: CombinePayload
-	StandardPTransforms_COMBINE_PER_KEY_EXTRACT_OUTPUTS StandardPTransforms_CombineComponents = 5
+	StandardPTransforms_COMBINE_PER_KEY_EXTRACT_OUTPUTS StandardPTransforms_CombineComponents = 2
 	// Represents the Combine Grouped Values transform, as described in the
 	// following document:
 	// https://s.apache.org/beam-runner-api-combine-model#heading=h.aj86ew4v1wk
 	// Payload: CombinePayload
-	StandardPTransforms_COMBINE_GROUPED_VALUES StandardPTransforms_CombineComponents = 6
+	StandardPTransforms_COMBINE_GROUPED_VALUES StandardPTransforms_CombineComponents = 3
 )
 
 var StandardPTransforms_CombineComponents_name = map[int32]string{
-	0: "COMBINE_PGBKCV",
-	1: "COMBINE_MERGE_ACCUMULATORS",
-	2: "COMBINE_EXTRACT_OUTPUTS",
-	3: "COMBINE_PER_KEY_PRECOMBINE",
-	4: "COMBINE_PER_KEY_MERGE_ACCUMULATORS",
-	5: "COMBINE_PER_KEY_EXTRACT_OUTPUTS",
-	6: "COMBINE_GROUPED_VALUES",
+	0: "COMBINE_PER_KEY_PRECOMBINE",
+	1: "COMBINE_PER_KEY_MERGE_ACCUMULATORS",
+	2: "COMBINE_PER_KEY_EXTRACT_OUTPUTS",
+	3: "COMBINE_GROUPED_VALUES",
 }
-
 var StandardPTransforms_CombineComponents_value = map[string]int32{
-	"COMBINE_PGBKCV":                     0,
-	"COMBINE_MERGE_ACCUMULATORS":         1,
-	"COMBINE_EXTRACT_OUTPUTS":            2,
-	"COMBINE_PER_KEY_PRECOMBINE":         3,
-	"COMBINE_PER_KEY_MERGE_ACCUMULATORS": 4,
-	"COMBINE_PER_KEY_EXTRACT_OUTPUTS":    5,
-	"COMBINE_GROUPED_VALUES":             6,
+	"COMBINE_PER_KEY_PRECOMBINE":         0,
+	"COMBINE_PER_KEY_MERGE_ACCUMULATORS": 1,
+	"COMBINE_PER_KEY_EXTRACT_OUTPUTS":    2,
+	"COMBINE_GROUPED_VALUES":             3,
 }
 
 func (x StandardPTransforms_CombineComponents) String() string {
 	return proto.EnumName(StandardPTransforms_CombineComponents_name, int32(x))
 }
-
 func (StandardPTransforms_CombineComponents) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{5, 3}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{4, 3}
 }
 
 // Payload for all of these: ParDoPayload containing the user's SDF
@@ -288,6 +273,18 @@ const (
 	// and restrictions.
 	// Input: KV(element, restriction); output: DoFn's output.
 	StandardPTransforms_PROCESS_ELEMENTS StandardPTransforms_SplittableParDoComponents = 3
+	// Splits the restriction of each element/restriction pair and returns the
+	// resulting splits, with a corresponding floating point size estimations
+	// for each.
+	// A reasonable value for size is the number of bytes expected to be
+	// produced by this (element, restriction) pair.
+	// Input: KV(element, restriction)
+	// Output: KV(KV(element, restriction), size))
+	StandardPTransforms_SPLIT_AND_SIZE_RESTRICTIONS StandardPTransforms_SplittableParDoComponents = 4
+	// Like PROCESS_ELEMENTS, but accepts the sized output produced by
+	// SPLIT_RESTRICTION_WITH_SIZING.
+	// Input: KV(KV(element, restriction), size); output: DoFn's output.
+	StandardPTransforms_PROCESS_SIZED_ELEMENTS_AND_RESTRICTIONS StandardPTransforms_SplittableParDoComponents = 5
 )
 
 var StandardPTransforms_SplittableParDoComponents_name = map[int32]string{
@@ -295,27 +292,37 @@ var StandardPTransforms_SplittableParDoComponents_name = map[int32]string{
 	1: "SPLIT_RESTRICTION",
 	2: "PROCESS_KEYED_ELEMENTS",
 	3: "PROCESS_ELEMENTS",
+	4: "SPLIT_AND_SIZE_RESTRICTIONS",
+	5: "PROCESS_SIZED_ELEMENTS_AND_RESTRICTIONS",
 }
-
 var StandardPTransforms_SplittableParDoComponents_value = map[string]int32{
-	"PAIR_WITH_RESTRICTION":  0,
-	"SPLIT_RESTRICTION":      1,
-	"PROCESS_KEYED_ELEMENTS": 2,
-	"PROCESS_ELEMENTS":       3,
+	"PAIR_WITH_RESTRICTION":                   0,
+	"SPLIT_RESTRICTION":                       1,
+	"PROCESS_KEYED_ELEMENTS":                  2,
+	"PROCESS_ELEMENTS":                        3,
+	"SPLIT_AND_SIZE_RESTRICTIONS":             4,
+	"PROCESS_SIZED_ELEMENTS_AND_RESTRICTIONS": 5,
 }
 
 func (x StandardPTransforms_SplittableParDoComponents) String() string {
 	return proto.EnumName(StandardPTransforms_SplittableParDoComponents_name, int32(x))
 }
-
 func (StandardPTransforms_SplittableParDoComponents) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{5, 4}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{4, 4}
 }
 
 type StandardSideInputTypes_Enum int32
 
 const (
+	// Represents a view over a PCollection<V>.
+	//
+	// StateGetRequests performed on this side input must use
+	// StateKey.IterableSideInput.
 	StandardSideInputTypes_ITERABLE StandardSideInputTypes_Enum = 0
+	// Represents a view over a PCollection<KV<K, V>>.
+	//
+	// StateGetRequests performed on this side input must use
+	// StateKey.IterableSideInput or StateKey.MultimapSideInput.
 	StandardSideInputTypes_MULTIMAP StandardSideInputTypes_Enum = 1
 )
 
@@ -323,7 +330,6 @@ var StandardSideInputTypes_Enum_name = map[int32]string{
 	0: "ITERABLE",
 	1: "MULTIMAP",
 }
-
 var StandardSideInputTypes_Enum_value = map[string]int32{
 	"ITERABLE": 0,
 	"MULTIMAP": 1,
@@ -332,9 +338,8 @@ var StandardSideInputTypes_Enum_value = map[string]int32{
 func (x StandardSideInputTypes_Enum) String() string {
 	return proto.EnumName(StandardSideInputTypes_Enum_name, int32(x))
 }
-
 func (StandardSideInputTypes_Enum) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{6, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{5, 0}
 }
 
 type Parameter_Type_Enum int32
@@ -352,7 +357,6 @@ var Parameter_Type_Enum_name = map[int32]string{
 	2: "PIPELINE_OPTIONS",
 	3: "RESTRICTION_TRACKER",
 }
-
 var Parameter_Type_Enum_value = map[string]int32{
 	"UNSPECIFIED":         0,
 	"WINDOW":              1,
@@ -363,9 +367,8 @@ var Parameter_Type_Enum_value = map[string]int32{
 func (x Parameter_Type_Enum) String() string {
 	return proto.EnumName(Parameter_Type_Enum_name, int32(x))
 }
-
 func (Parameter_Type_Enum) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{10, 0, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{8, 0, 0}
 }
 
 type IsBounded_Enum int32
@@ -381,7 +384,6 @@ var IsBounded_Enum_name = map[int32]string{
 	1: "UNBOUNDED",
 	2: "BOUNDED",
 }
-
 var IsBounded_Enum_value = map[string]int32{
 	"UNSPECIFIED": 0,
 	"UNBOUNDED":   1,
@@ -391,9 +393,8 @@ var IsBounded_Enum_value = map[string]int32{
 func (x IsBounded_Enum) String() string {
 	return proto.EnumName(IsBounded_Enum_name, int32(x))
 }
-
 func (IsBounded_Enum) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{18, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{16, 0}
 }
 
 type StandardCoders_Enum int32
@@ -401,11 +402,36 @@ type StandardCoders_Enum int32
 const (
 	// Components: None
 	StandardCoders_BYTES StandardCoders_Enum = 0
+	// Components: None
+	StandardCoders_STRING_UTF8 StandardCoders_Enum = 10
 	// Components: The key and value coder, in that order.
 	StandardCoders_KV StandardCoders_Enum = 1
 	// Components: None
+	StandardCoders_BOOL StandardCoders_Enum = 12
+	// Variable length Encodes a 64-bit integer.
+	// Components: None
 	StandardCoders_VARINT StandardCoders_Enum = 2
+	// Encodes the floating point value as a big-endian 64-bit integer
+	// according to the IEEE 754 double format bit layout.
+	// Components: None
+	StandardCoders_DOUBLE StandardCoders_Enum = 11
 	// Encodes an iterable of elements.
+	//
+	// The encoding for an iterable [e1...eN] of known length N is
+	//
+	//    fixed32(N)
+	//    encode(e1) encode(e2) encode(e3) ... encode(eN)
+	//
+	// If the length is unknown, it is batched up into groups of size b1..bM
+	// and encoded as
+	//
+	//     fixed32(-1)
+	//     varInt64(b1) encode(e1) encode(e2) ... encode(e_b1)
+	//     varInt64(b2) encode(e_(b1+1)) encode(e_(b1+2)) ... encode(e_(b1+b2))
+	//     ...
+	//     varInt64(bM) encode(e_(N-bM+1)) encode(e_(N-bM+2)) ... encode(eN)
+	//     varInt64(0)
+	//
 	// Components: Coder for a single element.
 	StandardCoders_ITERABLE StandardCoders_Enum = 3
 	// Encodes a timer containing a timestamp and a user specified payload.
@@ -436,38 +462,99 @@ const (
 	// of the element
 	// Components: The element coder and the window coder, in that order
 	StandardCoders_WINDOWED_VALUE StandardCoders_Enum = 8
+	// Encodes an iterable of elements, some of which may be stored elsewhere.
+	//
+	// The encoding for a state-backed iterable is the same as that for
+	// an iterable, but the final varInt64(0) terminating the set of batches
+	// may instead be replaced by
+	//
+	//     varInt64(-1)
+	//     varInt64(len(token))
+	//     token
+	//
+	// where token is an opaque byte string that can be used to fetch the
+	// remainder of the iterable (e.g. over the state API).
+	//
+	// Components: Coder for a single element.
+	// Experimental.
+	StandardCoders_STATE_BACKED_ITERABLE StandardCoders_Enum = 9
+	// Encodes a "row", an element with a known schema, defined by an
+	// instance of Schema from schema.proto.
+	//
+	// A row is encoded as the concatenation of:
+	//   - The number of attributes in the schema, encoded with
+	//     beam:coder:varint:v1. This makes it possible to detect certain
+	//     allowed schema changes (appending or removing columns) in
+	//     long-running streaming pipelines.
+	//   - A byte array representing a packed bitset indicating null fields (a
+	//     1 indicating a null) encoded with beam:coder:bytes:v1. The unused
+	//     bits in the last byte must be set to 0. If there are no nulls an
+	//     empty byte array is encoded.
+	//     The two-byte bitset (not including the lenghth-prefix) for the row
+	//     [NULL, 0, 0, 0, NULL, 0, 0, NULL, 0, NULL] would be
+	//     [0b10010001, 0b00000010]
+	//   - An encoding for each non-null field, concatenated together.
+	//
+	// Schema types are mapped to coders as follows:
+	//   AtomicType:
+	//     BYTE:      not yet a standard coder (BEAM-7996)
+	//     INT16:     not yet a standard coder (BEAM-7996)
+	//     INT32:     beam:coder:varint:v1
+	//     INT64:     beam:coder:varint:v1
+	//     FLOAT:     not yet a standard coder (BEAM-7996)
+	//     DOUBLE:    beam:coder:double:v1
+	//     STRING:    beam:coder:string_utf8:v1
+	//     BOOLEAN:   beam:coder:bool:v1
+	//     BYTES:     beam:coder:bytes:v1
+	//   ArrayType:   beam:coder:iterable:v1 (always has a known length)
+	//   MapType:     not yet a standard coder (BEAM-7996)
+	//   RowType:     beam:coder:row:v1
+	//   LogicalType: Uses the coder for its representation.
+	//
+	// The payload for RowCoder is an instance of Schema.
+	// Components: None
+	// Experimental.
+	StandardCoders_ROW StandardCoders_Enum = 13
 )
 
 var StandardCoders_Enum_name = map[int32]string{
-	0: "BYTES",
-	1: "KV",
-	2: "VARINT",
-	3: "ITERABLE",
-	4: "TIMER",
-	5: "INTERVAL_WINDOW",
-	6: "LENGTH_PREFIX",
-	7: "GLOBAL_WINDOW",
-	8: "WINDOWED_VALUE",
+	0:  "BYTES",
+	10: "STRING_UTF8",
+	1:  "KV",
+	12: "BOOL",
+	2:  "VARINT",
+	11: "DOUBLE",
+	3:  "ITERABLE",
+	4:  "TIMER",
+	5:  "INTERVAL_WINDOW",
+	6:  "LENGTH_PREFIX",
+	7:  "GLOBAL_WINDOW",
+	8:  "WINDOWED_VALUE",
+	9:  "STATE_BACKED_ITERABLE",
+	13: "ROW",
 }
-
 var StandardCoders_Enum_value = map[string]int32{
-	"BYTES":           0,
-	"KV":              1,
-	"VARINT":          2,
-	"ITERABLE":        3,
-	"TIMER":           4,
-	"INTERVAL_WINDOW": 5,
-	"LENGTH_PREFIX":   6,
-	"GLOBAL_WINDOW":   7,
-	"WINDOWED_VALUE":  8,
+	"BYTES":                 0,
+	"STRING_UTF8":           10,
+	"KV":                    1,
+	"BOOL":                  12,
+	"VARINT":                2,
+	"DOUBLE":                11,
+	"ITERABLE":              3,
+	"TIMER":                 4,
+	"INTERVAL_WINDOW":       5,
+	"LENGTH_PREFIX":         6,
+	"GLOBAL_WINDOW":         7,
+	"WINDOWED_VALUE":        8,
+	"STATE_BACKED_ITERABLE": 9,
+	"ROW": 13,
 }
 
 func (x StandardCoders_Enum) String() string {
 	return proto.EnumName(StandardCoders_Enum_name, int32(x))
 }
-
 func (StandardCoders_Enum) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{25, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{24, 0}
 }
 
 type MergeStatus_Enum int32
@@ -493,7 +580,6 @@ var MergeStatus_Enum_name = map[int32]string{
 	2: "NEEDS_MERGE",
 	3: "ALREADY_MERGED",
 }
-
 var MergeStatus_Enum_value = map[string]int32{
 	"UNSPECIFIED":    0,
 	"NON_MERGING":    1,
@@ -504,9 +590,8 @@ var MergeStatus_Enum_value = map[string]int32{
 func (x MergeStatus_Enum) String() string {
 	return proto.EnumName(MergeStatus_Enum_name, int32(x))
 }
-
 func (MergeStatus_Enum) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{27, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{26, 0}
 }
 
 type AccumulationMode_Enum int32
@@ -517,26 +602,28 @@ const (
 	AccumulationMode_DISCARDING AccumulationMode_Enum = 1
 	// The aggregation is accumulated across outputs
 	AccumulationMode_ACCUMULATING AccumulationMode_Enum = 2
+	// The aggregation emits retractions when it is output
+	AccumulationMode_RETRACTING AccumulationMode_Enum = 3
 )
 
 var AccumulationMode_Enum_name = map[int32]string{
 	0: "UNSPECIFIED",
 	1: "DISCARDING",
 	2: "ACCUMULATING",
+	3: "RETRACTING",
 }
-
 var AccumulationMode_Enum_value = map[string]int32{
 	"UNSPECIFIED":  0,
 	"DISCARDING":   1,
 	"ACCUMULATING": 2,
+	"RETRACTING":   3,
 }
 
 func (x AccumulationMode_Enum) String() string {
 	return proto.EnumName(AccumulationMode_Enum_name, int32(x))
 }
-
 func (AccumulationMode_Enum) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{28, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{27, 0}
 }
 
 type ClosingBehavior_Enum int32
@@ -555,7 +642,6 @@ var ClosingBehavior_Enum_name = map[int32]string{
 	1: "EMIT_ALWAYS",
 	2: "EMIT_IF_NONEMPTY",
 }
-
 var ClosingBehavior_Enum_value = map[string]int32{
 	"UNSPECIFIED":      0,
 	"EMIT_ALWAYS":      1,
@@ -565,9 +651,8 @@ var ClosingBehavior_Enum_value = map[string]int32{
 func (x ClosingBehavior_Enum) String() string {
 	return proto.EnumName(ClosingBehavior_Enum_name, int32(x))
 }
-
 func (ClosingBehavior_Enum) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{29, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{28, 0}
 }
 
 type OnTimeBehavior_Enum int32
@@ -586,7 +671,6 @@ var OnTimeBehavior_Enum_name = map[int32]string{
 	1: "FIRE_ALWAYS",
 	2: "FIRE_IF_NONEMPTY",
 }
-
 var OnTimeBehavior_Enum_value = map[string]int32{
 	"UNSPECIFIED":      0,
 	"FIRE_ALWAYS":      1,
@@ -596,9 +680,8 @@ var OnTimeBehavior_Enum_value = map[string]int32{
 func (x OnTimeBehavior_Enum) String() string {
 	return proto.EnumName(OnTimeBehavior_Enum_name, int32(x))
 }
-
 func (OnTimeBehavior_Enum) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{30, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{29, 0}
 }
 
 type OutputTime_Enum int32
@@ -621,7 +704,6 @@ var OutputTime_Enum_name = map[int32]string{
 	2: "LATEST_IN_PANE",
 	3: "EARLIEST_IN_PANE",
 }
-
 var OutputTime_Enum_value = map[string]int32{
 	"UNSPECIFIED":      0,
 	"END_OF_WINDOW":    1,
@@ -632,9 +714,8 @@ var OutputTime_Enum_value = map[string]int32{
 func (x OutputTime_Enum) String() string {
 	return proto.EnumName(OutputTime_Enum_name, int32(x))
 }
-
 func (OutputTime_Enum) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{31, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{30, 0}
 }
 
 type TimeDomain_Enum int32
@@ -660,7 +741,6 @@ var TimeDomain_Enum_name = map[int32]string{
 	2: "PROCESSING_TIME",
 	3: "SYNCHRONIZED_PROCESSING_TIME",
 }
-
 var TimeDomain_Enum_value = map[string]int32{
 	"UNSPECIFIED":                  0,
 	"EVENT_TIME":                   1,
@@ -671,9 +751,8 @@ var TimeDomain_Enum_value = map[string]int32{
 func (x TimeDomain_Enum) String() string {
 	return proto.EnumName(TimeDomain_Enum_name, int32(x))
 }
-
 func (TimeDomain_Enum) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{32, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{31, 0}
 }
 
 type StandardEnvironments_Environments int32
@@ -689,7 +768,6 @@ var StandardEnvironments_Environments_name = map[int32]string{
 	1: "PROCESS",
 	2: "EXTERNAL",
 }
-
 var StandardEnvironments_Environments_value = map[string]int32{
 	"DOCKER":   0,
 	"PROCESS":  1,
@@ -699,9 +777,8 @@ var StandardEnvironments_Environments_value = map[string]int32{
 func (x StandardEnvironments_Environments) String() string {
 	return proto.EnumName(StandardEnvironments_Environments_name, int32(x))
 }
-
 func (StandardEnvironments_Environments) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{37, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{36, 0}
 }
 
 type DisplayData_Type_Enum int32
@@ -727,7 +804,6 @@ var DisplayData_Type_Enum_name = map[int32]string{
 	6: "DURATION",
 	7: "JAVA_CLASS",
 }
-
 var DisplayData_Type_Enum_value = map[string]int32{
 	"UNSPECIFIED": 0,
 	"STRING":      1,
@@ -742,9 +818,8 @@ var DisplayData_Type_Enum_value = map[string]int32{
 func (x DisplayData_Type_Enum) String() string {
 	return proto.EnumName(DisplayData_Type_Enum_name, int32(x))
 }
-
 func (DisplayData_Type_Enum) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{42, 2, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{42, 2, 0}
 }
 
 type BeamConstants struct {
@@ -757,17 +832,16 @@ func (m *BeamConstants) Reset()         { *m = BeamConstants{} }
 func (m *BeamConstants) String() string { return proto.CompactTextString(m) }
 func (*BeamConstants) ProtoMessage()    {}
 func (*BeamConstants) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{0}
 }
-
 func (m *BeamConstants) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_BeamConstants.Unmarshal(m, b)
 }
 func (m *BeamConstants) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_BeamConstants.Marshal(b, m, deterministic)
 }
-func (m *BeamConstants) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_BeamConstants.Merge(m, src)
+func (dst *BeamConstants) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BeamConstants.Merge(dst, src)
 }
 func (m *BeamConstants) XXX_Size() int {
 	return xxx_messageInfo_BeamConstants.Size(m)
@@ -800,17 +874,16 @@ func (m *Components) Reset()         { *m = Components{} }
 func (m *Components) String() string { return proto.CompactTextString(m) }
 func (*Components) ProtoMessage()    {}
 func (*Components) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{1}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{1}
 }
-
 func (m *Components) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Components.Unmarshal(m, b)
 }
 func (m *Components) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Components.Marshal(b, m, deterministic)
 }
-func (m *Components) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Components.Merge(m, src)
+func (dst *Components) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Components.Merge(dst, src)
 }
 func (m *Components) XXX_Size() int {
 	return xxx_messageInfo_Components.Size(m)
@@ -856,467 +929,6 @@ func (m *Components) GetEnvironments() map[string]*Environment {
 	return nil
 }
 
-// A disjoint union of all the things that may contain references
-// that require Components to resolve.
-type MessageWithComponents struct {
-	// (Optional) The by-reference components of the root message,
-	// enabling a standalone message.
-	//
-	// If this is absent, it is expected that there are no
-	// references.
-	Components *Components `protobuf:"bytes,1,opt,name=components,proto3" json:"components,omitempty"`
-	// (Required) The root message that may contain pointers
-	// that should be resolved by looking inside components.
-	//
-	// Types that are valid to be assigned to Root:
-	//	*MessageWithComponents_Coder
-	//	*MessageWithComponents_CombinePayload
-	//	*MessageWithComponents_SdkFunctionSpec
-	//	*MessageWithComponents_ParDoPayload
-	//	*MessageWithComponents_Ptransform
-	//	*MessageWithComponents_Pcollection
-	//	*MessageWithComponents_ReadPayload
-	//	*MessageWithComponents_SideInput
-	//	*MessageWithComponents_WindowIntoPayload
-	//	*MessageWithComponents_WindowingStrategy
-	//	*MessageWithComponents_FunctionSpec
-	Root                 isMessageWithComponents_Root `protobuf_oneof:"root"`
-	XXX_NoUnkeyedLiteral struct{}                     `json:"-"`
-	XXX_unrecognized     []byte                       `json:"-"`
-	XXX_sizecache        int32                        `json:"-"`
-}
-
-func (m *MessageWithComponents) Reset()         { *m = MessageWithComponents{} }
-func (m *MessageWithComponents) String() string { return proto.CompactTextString(m) }
-func (*MessageWithComponents) ProtoMessage()    {}
-func (*MessageWithComponents) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{2}
-}
-
-func (m *MessageWithComponents) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_MessageWithComponents.Unmarshal(m, b)
-}
-func (m *MessageWithComponents) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_MessageWithComponents.Marshal(b, m, deterministic)
-}
-func (m *MessageWithComponents) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_MessageWithComponents.Merge(m, src)
-}
-func (m *MessageWithComponents) XXX_Size() int {
-	return xxx_messageInfo_MessageWithComponents.Size(m)
-}
-func (m *MessageWithComponents) XXX_DiscardUnknown() {
-	xxx_messageInfo_MessageWithComponents.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_MessageWithComponents proto.InternalMessageInfo
-
-func (m *MessageWithComponents) GetComponents() *Components {
-	if m != nil {
-		return m.Components
-	}
-	return nil
-}
-
-type isMessageWithComponents_Root interface {
-	isMessageWithComponents_Root()
-}
-
-type MessageWithComponents_Coder struct {
-	Coder *Coder `protobuf:"bytes,2,opt,name=coder,proto3,oneof"`
-}
-
-type MessageWithComponents_CombinePayload struct {
-	CombinePayload *CombinePayload `protobuf:"bytes,3,opt,name=combine_payload,json=combinePayload,proto3,oneof"`
-}
-
-type MessageWithComponents_SdkFunctionSpec struct {
-	SdkFunctionSpec *SdkFunctionSpec `protobuf:"bytes,4,opt,name=sdk_function_spec,json=sdkFunctionSpec,proto3,oneof"`
-}
-
-type MessageWithComponents_ParDoPayload struct {
-	ParDoPayload *ParDoPayload `protobuf:"bytes,6,opt,name=par_do_payload,json=parDoPayload,proto3,oneof"`
-}
-
-type MessageWithComponents_Ptransform struct {
-	Ptransform *PTransform `protobuf:"bytes,7,opt,name=ptransform,proto3,oneof"`
-}
-
-type MessageWithComponents_Pcollection struct {
-	Pcollection *PCollection `protobuf:"bytes,8,opt,name=pcollection,proto3,oneof"`
-}
-
-type MessageWithComponents_ReadPayload struct {
-	ReadPayload *ReadPayload `protobuf:"bytes,9,opt,name=read_payload,json=readPayload,proto3,oneof"`
-}
-
-type MessageWithComponents_SideInput struct {
-	SideInput *SideInput `protobuf:"bytes,11,opt,name=side_input,json=sideInput,proto3,oneof"`
-}
-
-type MessageWithComponents_WindowIntoPayload struct {
-	WindowIntoPayload *WindowIntoPayload `protobuf:"bytes,12,opt,name=window_into_payload,json=windowIntoPayload,proto3,oneof"`
-}
-
-type MessageWithComponents_WindowingStrategy struct {
-	WindowingStrategy *WindowingStrategy `protobuf:"bytes,13,opt,name=windowing_strategy,json=windowingStrategy,proto3,oneof"`
-}
-
-type MessageWithComponents_FunctionSpec struct {
-	FunctionSpec *FunctionSpec `protobuf:"bytes,14,opt,name=function_spec,json=functionSpec,proto3,oneof"`
-}
-
-func (*MessageWithComponents_Coder) isMessageWithComponents_Root() {}
-
-func (*MessageWithComponents_CombinePayload) isMessageWithComponents_Root() {}
-
-func (*MessageWithComponents_SdkFunctionSpec) isMessageWithComponents_Root() {}
-
-func (*MessageWithComponents_ParDoPayload) isMessageWithComponents_Root() {}
-
-func (*MessageWithComponents_Ptransform) isMessageWithComponents_Root() {}
-
-func (*MessageWithComponents_Pcollection) isMessageWithComponents_Root() {}
-
-func (*MessageWithComponents_ReadPayload) isMessageWithComponents_Root() {}
-
-func (*MessageWithComponents_SideInput) isMessageWithComponents_Root() {}
-
-func (*MessageWithComponents_WindowIntoPayload) isMessageWithComponents_Root() {}
-
-func (*MessageWithComponents_WindowingStrategy) isMessageWithComponents_Root() {}
-
-func (*MessageWithComponents_FunctionSpec) isMessageWithComponents_Root() {}
-
-func (m *MessageWithComponents) GetRoot() isMessageWithComponents_Root {
-	if m != nil {
-		return m.Root
-	}
-	return nil
-}
-
-func (m *MessageWithComponents) GetCoder() *Coder {
-	if x, ok := m.GetRoot().(*MessageWithComponents_Coder); ok {
-		return x.Coder
-	}
-	return nil
-}
-
-func (m *MessageWithComponents) GetCombinePayload() *CombinePayload {
-	if x, ok := m.GetRoot().(*MessageWithComponents_CombinePayload); ok {
-		return x.CombinePayload
-	}
-	return nil
-}
-
-func (m *MessageWithComponents) GetSdkFunctionSpec() *SdkFunctionSpec {
-	if x, ok := m.GetRoot().(*MessageWithComponents_SdkFunctionSpec); ok {
-		return x.SdkFunctionSpec
-	}
-	return nil
-}
-
-func (m *MessageWithComponents) GetParDoPayload() *ParDoPayload {
-	if x, ok := m.GetRoot().(*MessageWithComponents_ParDoPayload); ok {
-		return x.ParDoPayload
-	}
-	return nil
-}
-
-func (m *MessageWithComponents) GetPtransform() *PTransform {
-	if x, ok := m.GetRoot().(*MessageWithComponents_Ptransform); ok {
-		return x.Ptransform
-	}
-	return nil
-}
-
-func (m *MessageWithComponents) GetPcollection() *PCollection {
-	if x, ok := m.GetRoot().(*MessageWithComponents_Pcollection); ok {
-		return x.Pcollection
-	}
-	return nil
-}
-
-func (m *MessageWithComponents) GetReadPayload() *ReadPayload {
-	if x, ok := m.GetRoot().(*MessageWithComponents_ReadPayload); ok {
-		return x.ReadPayload
-	}
-	return nil
-}
-
-func (m *MessageWithComponents) GetSideInput() *SideInput {
-	if x, ok := m.GetRoot().(*MessageWithComponents_SideInput); ok {
-		return x.SideInput
-	}
-	return nil
-}
-
-func (m *MessageWithComponents) GetWindowIntoPayload() *WindowIntoPayload {
-	if x, ok := m.GetRoot().(*MessageWithComponents_WindowIntoPayload); ok {
-		return x.WindowIntoPayload
-	}
-	return nil
-}
-
-func (m *MessageWithComponents) GetWindowingStrategy() *WindowingStrategy {
-	if x, ok := m.GetRoot().(*MessageWithComponents_WindowingStrategy); ok {
-		return x.WindowingStrategy
-	}
-	return nil
-}
-
-func (m *MessageWithComponents) GetFunctionSpec() *FunctionSpec {
-	if x, ok := m.GetRoot().(*MessageWithComponents_FunctionSpec); ok {
-		return x.FunctionSpec
-	}
-	return nil
-}
-
-// XXX_OneofFuncs is for the internal use of the proto package.
-func (*MessageWithComponents) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
-	return _MessageWithComponents_OneofMarshaler, _MessageWithComponents_OneofUnmarshaler, _MessageWithComponents_OneofSizer, []interface{}{
-		(*MessageWithComponents_Coder)(nil),
-		(*MessageWithComponents_CombinePayload)(nil),
-		(*MessageWithComponents_SdkFunctionSpec)(nil),
-		(*MessageWithComponents_ParDoPayload)(nil),
-		(*MessageWithComponents_Ptransform)(nil),
-		(*MessageWithComponents_Pcollection)(nil),
-		(*MessageWithComponents_ReadPayload)(nil),
-		(*MessageWithComponents_SideInput)(nil),
-		(*MessageWithComponents_WindowIntoPayload)(nil),
-		(*MessageWithComponents_WindowingStrategy)(nil),
-		(*MessageWithComponents_FunctionSpec)(nil),
-	}
-}
-
-func _MessageWithComponents_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
-	m := msg.(*MessageWithComponents)
-	// root
-	switch x := m.Root.(type) {
-	case *MessageWithComponents_Coder:
-		b.EncodeVarint(2<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.Coder); err != nil {
-			return err
-		}
-	case *MessageWithComponents_CombinePayload:
-		b.EncodeVarint(3<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.CombinePayload); err != nil {
-			return err
-		}
-	case *MessageWithComponents_SdkFunctionSpec:
-		b.EncodeVarint(4<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.SdkFunctionSpec); err != nil {
-			return err
-		}
-	case *MessageWithComponents_ParDoPayload:
-		b.EncodeVarint(6<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.ParDoPayload); err != nil {
-			return err
-		}
-	case *MessageWithComponents_Ptransform:
-		b.EncodeVarint(7<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.Ptransform); err != nil {
-			return err
-		}
-	case *MessageWithComponents_Pcollection:
-		b.EncodeVarint(8<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.Pcollection); err != nil {
-			return err
-		}
-	case *MessageWithComponents_ReadPayload:
-		b.EncodeVarint(9<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.ReadPayload); err != nil {
-			return err
-		}
-	case *MessageWithComponents_SideInput:
-		b.EncodeVarint(11<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.SideInput); err != nil {
-			return err
-		}
-	case *MessageWithComponents_WindowIntoPayload:
-		b.EncodeVarint(12<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.WindowIntoPayload); err != nil {
-			return err
-		}
-	case *MessageWithComponents_WindowingStrategy:
-		b.EncodeVarint(13<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.WindowingStrategy); err != nil {
-			return err
-		}
-	case *MessageWithComponents_FunctionSpec:
-		b.EncodeVarint(14<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.FunctionSpec); err != nil {
-			return err
-		}
-	case nil:
-	default:
-		return fmt.Errorf("MessageWithComponents.Root has unexpected type %T", x)
-	}
-	return nil
-}
-
-func _MessageWithComponents_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
-	m := msg.(*MessageWithComponents)
-	switch tag {
-	case 2: // root.coder
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(Coder)
-		err := b.DecodeMessage(msg)
-		m.Root = &MessageWithComponents_Coder{msg}
-		return true, err
-	case 3: // root.combine_payload
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(CombinePayload)
-		err := b.DecodeMessage(msg)
-		m.Root = &MessageWithComponents_CombinePayload{msg}
-		return true, err
-	case 4: // root.sdk_function_spec
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(SdkFunctionSpec)
-		err := b.DecodeMessage(msg)
-		m.Root = &MessageWithComponents_SdkFunctionSpec{msg}
-		return true, err
-	case 6: // root.par_do_payload
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(ParDoPayload)
-		err := b.DecodeMessage(msg)
-		m.Root = &MessageWithComponents_ParDoPayload{msg}
-		return true, err
-	case 7: // root.ptransform
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(PTransform)
-		err := b.DecodeMessage(msg)
-		m.Root = &MessageWithComponents_Ptransform{msg}
-		return true, err
-	case 8: // root.pcollection
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(PCollection)
-		err := b.DecodeMessage(msg)
-		m.Root = &MessageWithComponents_Pcollection{msg}
-		return true, err
-	case 9: // root.read_payload
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(ReadPayload)
-		err := b.DecodeMessage(msg)
-		m.Root = &MessageWithComponents_ReadPayload{msg}
-		return true, err
-	case 11: // root.side_input
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(SideInput)
-		err := b.DecodeMessage(msg)
-		m.Root = &MessageWithComponents_SideInput{msg}
-		return true, err
-	case 12: // root.window_into_payload
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(WindowIntoPayload)
-		err := b.DecodeMessage(msg)
-		m.Root = &MessageWithComponents_WindowIntoPayload{msg}
-		return true, err
-	case 13: // root.windowing_strategy
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(WindowingStrategy)
-		err := b.DecodeMessage(msg)
-		m.Root = &MessageWithComponents_WindowingStrategy{msg}
-		return true, err
-	case 14: // root.function_spec
-		if wire != proto.WireBytes {
-			return true, proto.ErrInternalBadWireType
-		}
-		msg := new(FunctionSpec)
-		err := b.DecodeMessage(msg)
-		m.Root = &MessageWithComponents_FunctionSpec{msg}
-		return true, err
-	default:
-		return false, nil
-	}
-}
-
-func _MessageWithComponents_OneofSizer(msg proto.Message) (n int) {
-	m := msg.(*MessageWithComponents)
-	// root
-	switch x := m.Root.(type) {
-	case *MessageWithComponents_Coder:
-		s := proto.Size(x.Coder)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *MessageWithComponents_CombinePayload:
-		s := proto.Size(x.CombinePayload)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *MessageWithComponents_SdkFunctionSpec:
-		s := proto.Size(x.SdkFunctionSpec)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *MessageWithComponents_ParDoPayload:
-		s := proto.Size(x.ParDoPayload)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *MessageWithComponents_Ptransform:
-		s := proto.Size(x.Ptransform)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *MessageWithComponents_Pcollection:
-		s := proto.Size(x.Pcollection)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *MessageWithComponents_ReadPayload:
-		s := proto.Size(x.ReadPayload)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *MessageWithComponents_SideInput:
-		s := proto.Size(x.SideInput)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *MessageWithComponents_WindowIntoPayload:
-		s := proto.Size(x.WindowIntoPayload)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *MessageWithComponents_WindowingStrategy:
-		s := proto.Size(x.WindowingStrategy)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case *MessageWithComponents_FunctionSpec:
-		s := proto.Size(x.FunctionSpec)
-		n += 1 // tag and wire
-		n += proto.SizeVarint(uint64(s))
-		n += s
-	case nil:
-	default:
-		panic(fmt.Sprintf("proto: unexpected type %T in oneof", x))
-	}
-	return n
-}
-
 // A Pipeline is a hierarchical graph of PTransforms, linked
 // by PCollections.
 //
@@ -1346,17 +958,16 @@ func (m *Pipeline) Reset()         { *m = Pipeline{} }
 func (m *Pipeline) String() string { return proto.CompactTextString(m) }
 func (*Pipeline) ProtoMessage()    {}
 func (*Pipeline) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{3}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{2}
 }
-
 func (m *Pipeline) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Pipeline.Unmarshal(m, b)
 }
 func (m *Pipeline) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Pipeline.Marshal(b, m, deterministic)
 }
-func (m *Pipeline) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Pipeline.Merge(m, src)
+func (dst *Pipeline) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Pipeline.Merge(dst, src)
 }
 func (m *Pipeline) XXX_Size() int {
 	return xxx_messageInfo_Pipeline.Size(m)
@@ -1417,7 +1028,7 @@ type PTransform struct {
 	// For some special composite transforms, the payload is also officially
 	// defined:
 	//
-	//  - when the URN is "urn:beam:transforms:combine" it is a CombinePayload
+	//  - when the URN is "beam:transforms:combine" it is a CombinePayload
 	//
 	Spec *FunctionSpec `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
 	// (Optional) if this node is a composite, a list of the ids of
@@ -1461,17 +1072,16 @@ func (m *PTransform) Reset()         { *m = PTransform{} }
 func (m *PTransform) String() string { return proto.CompactTextString(m) }
 func (*PTransform) ProtoMessage()    {}
 func (*PTransform) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{4}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{3}
 }
-
 func (m *PTransform) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_PTransform.Unmarshal(m, b)
 }
 func (m *PTransform) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_PTransform.Marshal(b, m, deterministic)
 }
-func (m *PTransform) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_PTransform.Merge(m, src)
+func (dst *PTransform) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PTransform.Merge(dst, src)
 }
 func (m *PTransform) XXX_Size() int {
 	return xxx_messageInfo_PTransform.Size(m)
@@ -1534,17 +1144,16 @@ func (m *StandardPTransforms) Reset()         { *m = StandardPTransforms{} }
 func (m *StandardPTransforms) String() string { return proto.CompactTextString(m) }
 func (*StandardPTransforms) ProtoMessage()    {}
 func (*StandardPTransforms) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{5}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{4}
 }
-
 func (m *StandardPTransforms) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_StandardPTransforms.Unmarshal(m, b)
 }
 func (m *StandardPTransforms) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_StandardPTransforms.Marshal(b, m, deterministic)
 }
-func (m *StandardPTransforms) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StandardPTransforms.Merge(m, src)
+func (dst *StandardPTransforms) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StandardPTransforms.Merge(dst, src)
 }
 func (m *StandardPTransforms) XXX_Size() int {
 	return xxx_messageInfo_StandardPTransforms.Size(m)
@@ -1565,17 +1174,16 @@ func (m *StandardSideInputTypes) Reset()         { *m = StandardSideInputTypes{}
 func (m *StandardSideInputTypes) String() string { return proto.CompactTextString(m) }
 func (*StandardSideInputTypes) ProtoMessage()    {}
 func (*StandardSideInputTypes) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{6}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{5}
 }
-
 func (m *StandardSideInputTypes) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_StandardSideInputTypes.Unmarshal(m, b)
 }
 func (m *StandardSideInputTypes) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_StandardSideInputTypes.Marshal(b, m, deterministic)
 }
-func (m *StandardSideInputTypes) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StandardSideInputTypes.Merge(m, src)
+func (dst *StandardSideInputTypes) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StandardSideInputTypes.Merge(dst, src)
 }
 func (m *StandardSideInputTypes) XXX_Size() int {
 	return xxx_messageInfo_StandardSideInputTypes.Size(m)
@@ -1616,17 +1224,16 @@ func (m *PCollection) Reset()         { *m = PCollection{} }
 func (m *PCollection) String() string { return proto.CompactTextString(m) }
 func (*PCollection) ProtoMessage()    {}
 func (*PCollection) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{7}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{6}
 }
-
 func (m *PCollection) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_PCollection.Unmarshal(m, b)
 }
 func (m *PCollection) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_PCollection.Marshal(b, m, deterministic)
 }
-func (m *PCollection) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_PCollection.Merge(m, src)
+func (dst *PCollection) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_PCollection.Merge(dst, src)
 }
 func (m *PCollection) XXX_Size() int {
 	return xxx_messageInfo_PCollection.Size(m)
@@ -1672,274 +1279,6 @@ func (m *PCollection) GetDisplayData() *DisplayData {
 	return nil
 }
 
-// The payload for an executable stage. This will eventually be passed to an SDK in the form of a
-// ProcessBundleDescriptor.
-type ExecutableStagePayload struct {
-	// (Required) Environment in which this stage executes.
-	//
-	// We use an environment rather than environment id
-	// because ExecutableStages use environments directly. This may change in the future.
-	Environment *Environment `protobuf:"bytes,1,opt,name=environment,proto3" json:"environment,omitempty"`
-	// (Required) Input PCollection id. This must be present as a value in the inputs of any
-	// PTransform the ExecutableStagePayload is the payload of.
-	Input string `protobuf:"bytes,2,opt,name=input,proto3" json:"input,omitempty"`
-	// The side inputs required for this executable stage. Each side input of each PTransform within
-	// this ExecutableStagePayload must be represented within this field.
-	SideInputs []*ExecutableStagePayload_SideInputId `protobuf:"bytes,3,rep,name=side_inputs,json=sideInputs,proto3" json:"side_inputs,omitempty"`
-	// PTransform ids contained within this executable stage. This must contain at least one
-	// PTransform id.
-	Transforms []string `protobuf:"bytes,4,rep,name=transforms,proto3" json:"transforms,omitempty"`
-	// Output PCollection ids. This must be equal to the values of the outputs of any
-	// PTransform the ExecutableStagePayload is the payload of.
-	Outputs []string `protobuf:"bytes,5,rep,name=outputs,proto3" json:"outputs,omitempty"`
-	// (Required) The components for the Executable Stage. This must contain all of the Transforms
-	// in transforms, and the closure of all of the components they recognize.
-	Components *Components `protobuf:"bytes,6,opt,name=components,proto3" json:"components,omitempty"`
-	// The user states required for this executable stage. Each user state of each PTransform within
-	// this ExecutableStagePayload must be represented within this field.
-	UserStates []*ExecutableStagePayload_UserStateId `protobuf:"bytes,7,rep,name=user_states,json=userStates,proto3" json:"user_states,omitempty"`
-	// The timers required for this executable stage. Each timer of each PTransform within
-	// this ExecutableStagePayload must be represented within this field.
-	Timers               []*ExecutableStagePayload_TimerId `protobuf:"bytes,8,rep,name=timers,proto3" json:"timers,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                          `json:"-"`
-	XXX_unrecognized     []byte                            `json:"-"`
-	XXX_sizecache        int32                             `json:"-"`
-}
-
-func (m *ExecutableStagePayload) Reset()         { *m = ExecutableStagePayload{} }
-func (m *ExecutableStagePayload) String() string { return proto.CompactTextString(m) }
-func (*ExecutableStagePayload) ProtoMessage()    {}
-func (*ExecutableStagePayload) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{8}
-}
-
-func (m *ExecutableStagePayload) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ExecutableStagePayload.Unmarshal(m, b)
-}
-func (m *ExecutableStagePayload) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ExecutableStagePayload.Marshal(b, m, deterministic)
-}
-func (m *ExecutableStagePayload) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ExecutableStagePayload.Merge(m, src)
-}
-func (m *ExecutableStagePayload) XXX_Size() int {
-	return xxx_messageInfo_ExecutableStagePayload.Size(m)
-}
-func (m *ExecutableStagePayload) XXX_DiscardUnknown() {
-	xxx_messageInfo_ExecutableStagePayload.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ExecutableStagePayload proto.InternalMessageInfo
-
-func (m *ExecutableStagePayload) GetEnvironment() *Environment {
-	if m != nil {
-		return m.Environment
-	}
-	return nil
-}
-
-func (m *ExecutableStagePayload) GetInput() string {
-	if m != nil {
-		return m.Input
-	}
-	return ""
-}
-
-func (m *ExecutableStagePayload) GetSideInputs() []*ExecutableStagePayload_SideInputId {
-	if m != nil {
-		return m.SideInputs
-	}
-	return nil
-}
-
-func (m *ExecutableStagePayload) GetTransforms() []string {
-	if m != nil {
-		return m.Transforms
-	}
-	return nil
-}
-
-func (m *ExecutableStagePayload) GetOutputs() []string {
-	if m != nil {
-		return m.Outputs
-	}
-	return nil
-}
-
-func (m *ExecutableStagePayload) GetComponents() *Components {
-	if m != nil {
-		return m.Components
-	}
-	return nil
-}
-
-func (m *ExecutableStagePayload) GetUserStates() []*ExecutableStagePayload_UserStateId {
-	if m != nil {
-		return m.UserStates
-	}
-	return nil
-}
-
-func (m *ExecutableStagePayload) GetTimers() []*ExecutableStagePayload_TimerId {
-	if m != nil {
-		return m.Timers
-	}
-	return nil
-}
-
-// A reference to a side input. Side inputs are uniquely identified by PTransform id and
-// local name.
-type ExecutableStagePayload_SideInputId struct {
-	// (Required) The id of the PTransform that references this side input.
-	TransformId string `protobuf:"bytes,1,opt,name=transform_id,json=transformId,proto3" json:"transform_id,omitempty"`
-	// (Required) The local name of this side input from the PTransform that references it.
-	LocalName            string   `protobuf:"bytes,2,opt,name=local_name,json=localName,proto3" json:"local_name,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *ExecutableStagePayload_SideInputId) Reset()         { *m = ExecutableStagePayload_SideInputId{} }
-func (m *ExecutableStagePayload_SideInputId) String() string { return proto.CompactTextString(m) }
-func (*ExecutableStagePayload_SideInputId) ProtoMessage()    {}
-func (*ExecutableStagePayload_SideInputId) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{8, 0}
-}
-
-func (m *ExecutableStagePayload_SideInputId) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ExecutableStagePayload_SideInputId.Unmarshal(m, b)
-}
-func (m *ExecutableStagePayload_SideInputId) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ExecutableStagePayload_SideInputId.Marshal(b, m, deterministic)
-}
-func (m *ExecutableStagePayload_SideInputId) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ExecutableStagePayload_SideInputId.Merge(m, src)
-}
-func (m *ExecutableStagePayload_SideInputId) XXX_Size() int {
-	return xxx_messageInfo_ExecutableStagePayload_SideInputId.Size(m)
-}
-func (m *ExecutableStagePayload_SideInputId) XXX_DiscardUnknown() {
-	xxx_messageInfo_ExecutableStagePayload_SideInputId.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ExecutableStagePayload_SideInputId proto.InternalMessageInfo
-
-func (m *ExecutableStagePayload_SideInputId) GetTransformId() string {
-	if m != nil {
-		return m.TransformId
-	}
-	return ""
-}
-
-func (m *ExecutableStagePayload_SideInputId) GetLocalName() string {
-	if m != nil {
-		return m.LocalName
-	}
-	return ""
-}
-
-// A reference to user state. User states are uniquely identified by PTransform id and
-// local name.
-type ExecutableStagePayload_UserStateId struct {
-	// (Required) The id of the PTransform that references this user state.
-	TransformId string `protobuf:"bytes,1,opt,name=transform_id,json=transformId,proto3" json:"transform_id,omitempty"`
-	// (Required) The local name of this user state for the PTransform that references it.
-	LocalName            string   `protobuf:"bytes,2,opt,name=local_name,json=localName,proto3" json:"local_name,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *ExecutableStagePayload_UserStateId) Reset()         { *m = ExecutableStagePayload_UserStateId{} }
-func (m *ExecutableStagePayload_UserStateId) String() string { return proto.CompactTextString(m) }
-func (*ExecutableStagePayload_UserStateId) ProtoMessage()    {}
-func (*ExecutableStagePayload_UserStateId) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{8, 1}
-}
-
-func (m *ExecutableStagePayload_UserStateId) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ExecutableStagePayload_UserStateId.Unmarshal(m, b)
-}
-func (m *ExecutableStagePayload_UserStateId) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ExecutableStagePayload_UserStateId.Marshal(b, m, deterministic)
-}
-func (m *ExecutableStagePayload_UserStateId) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ExecutableStagePayload_UserStateId.Merge(m, src)
-}
-func (m *ExecutableStagePayload_UserStateId) XXX_Size() int {
-	return xxx_messageInfo_ExecutableStagePayload_UserStateId.Size(m)
-}
-func (m *ExecutableStagePayload_UserStateId) XXX_DiscardUnknown() {
-	xxx_messageInfo_ExecutableStagePayload_UserStateId.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ExecutableStagePayload_UserStateId proto.InternalMessageInfo
-
-func (m *ExecutableStagePayload_UserStateId) GetTransformId() string {
-	if m != nil {
-		return m.TransformId
-	}
-	return ""
-}
-
-func (m *ExecutableStagePayload_UserStateId) GetLocalName() string {
-	if m != nil {
-		return m.LocalName
-	}
-	return ""
-}
-
-// A reference to a timer. Timers are uniquely identified by PTransform id and
-// local name.
-type ExecutableStagePayload_TimerId struct {
-	// (Required) The id of the PTransform that references this timer.
-	TransformId string `protobuf:"bytes,1,opt,name=transform_id,json=transformId,proto3" json:"transform_id,omitempty"`
-	// (Required) The local name of this timer for the PTransform that references it.
-	LocalName            string   `protobuf:"bytes,2,opt,name=local_name,json=localName,proto3" json:"local_name,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_unrecognized     []byte   `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *ExecutableStagePayload_TimerId) Reset()         { *m = ExecutableStagePayload_TimerId{} }
-func (m *ExecutableStagePayload_TimerId) String() string { return proto.CompactTextString(m) }
-func (*ExecutableStagePayload_TimerId) ProtoMessage()    {}
-func (*ExecutableStagePayload_TimerId) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{8, 2}
-}
-
-func (m *ExecutableStagePayload_TimerId) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ExecutableStagePayload_TimerId.Unmarshal(m, b)
-}
-func (m *ExecutableStagePayload_TimerId) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ExecutableStagePayload_TimerId.Marshal(b, m, deterministic)
-}
-func (m *ExecutableStagePayload_TimerId) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ExecutableStagePayload_TimerId.Merge(m, src)
-}
-func (m *ExecutableStagePayload_TimerId) XXX_Size() int {
-	return xxx_messageInfo_ExecutableStagePayload_TimerId.Size(m)
-}
-func (m *ExecutableStagePayload_TimerId) XXX_DiscardUnknown() {
-	xxx_messageInfo_ExecutableStagePayload_TimerId.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ExecutableStagePayload_TimerId proto.InternalMessageInfo
-
-func (m *ExecutableStagePayload_TimerId) GetTransformId() string {
-	if m != nil {
-		return m.TransformId
-	}
-	return ""
-}
-
-func (m *ExecutableStagePayload_TimerId) GetLocalName() string {
-	if m != nil {
-		return m.LocalName
-	}
-	return ""
-}
-
 // The payload for the primitive ParDo transform.
 type ParDoPayload struct {
 	// (Required) The SdkFunctionSpec of the DoFn.
@@ -1970,17 +1309,16 @@ func (m *ParDoPayload) Reset()         { *m = ParDoPayload{} }
 func (m *ParDoPayload) String() string { return proto.CompactTextString(m) }
 func (*ParDoPayload) ProtoMessage()    {}
 func (*ParDoPayload) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{9}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{7}
 }
-
 func (m *ParDoPayload) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ParDoPayload.Unmarshal(m, b)
 }
 func (m *ParDoPayload) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_ParDoPayload.Marshal(b, m, deterministic)
 }
-func (m *ParDoPayload) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ParDoPayload.Merge(m, src)
+func (dst *ParDoPayload) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ParDoPayload.Merge(dst, src)
 }
 func (m *ParDoPayload) XXX_Size() int {
 	return xxx_messageInfo_ParDoPayload.Size(m)
@@ -2072,17 +1410,16 @@ func (m *Parameter) Reset()         { *m = Parameter{} }
 func (m *Parameter) String() string { return proto.CompactTextString(m) }
 func (*Parameter) ProtoMessage()    {}
 func (*Parameter) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{10}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{8}
 }
-
 func (m *Parameter) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Parameter.Unmarshal(m, b)
 }
 func (m *Parameter) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Parameter.Marshal(b, m, deterministic)
 }
-func (m *Parameter) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Parameter.Merge(m, src)
+func (dst *Parameter) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Parameter.Merge(dst, src)
 }
 func (m *Parameter) XXX_Size() int {
 	return xxx_messageInfo_Parameter.Size(m)
@@ -2110,17 +1447,16 @@ func (m *Parameter_Type) Reset()         { *m = Parameter_Type{} }
 func (m *Parameter_Type) String() string { return proto.CompactTextString(m) }
 func (*Parameter_Type) ProtoMessage()    {}
 func (*Parameter_Type) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{10, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{8, 0}
 }
-
 func (m *Parameter_Type) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Parameter_Type.Unmarshal(m, b)
 }
 func (m *Parameter_Type) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Parameter_Type.Marshal(b, m, deterministic)
 }
-func (m *Parameter_Type) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Parameter_Type.Merge(m, src)
+func (dst *Parameter_Type) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Parameter_Type.Merge(dst, src)
 }
 func (m *Parameter_Type) XXX_Size() int {
 	return xxx_messageInfo_Parameter_Type.Size(m)
@@ -2133,7 +1469,7 @@ var xxx_messageInfo_Parameter_Type proto.InternalMessageInfo
 
 type StateSpec struct {
 	// Types that are valid to be assigned to Spec:
-	//	*StateSpec_ValueSpec
+	//	*StateSpec_ReadModifyWriteSpec
 	//	*StateSpec_BagSpec
 	//	*StateSpec_CombiningSpec
 	//	*StateSpec_MapSpec
@@ -2148,17 +1484,16 @@ func (m *StateSpec) Reset()         { *m = StateSpec{} }
 func (m *StateSpec) String() string { return proto.CompactTextString(m) }
 func (*StateSpec) ProtoMessage()    {}
 func (*StateSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{11}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{9}
 }
-
 func (m *StateSpec) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_StateSpec.Unmarshal(m, b)
 }
 func (m *StateSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_StateSpec.Marshal(b, m, deterministic)
 }
-func (m *StateSpec) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StateSpec.Merge(m, src)
+func (dst *StateSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StateSpec.Merge(dst, src)
 }
 func (m *StateSpec) XXX_Size() int {
 	return xxx_messageInfo_StateSpec.Size(m)
@@ -2173,35 +1508,27 @@ type isStateSpec_Spec interface {
 	isStateSpec_Spec()
 }
 
-type StateSpec_ValueSpec struct {
-	ValueSpec *ValueStateSpec `protobuf:"bytes,1,opt,name=value_spec,json=valueSpec,proto3,oneof"`
+type StateSpec_ReadModifyWriteSpec struct {
+	ReadModifyWriteSpec *ReadModifyWriteStateSpec `protobuf:"bytes,1,opt,name=read_modify_write_spec,json=readModifyWriteSpec,proto3,oneof"`
 }
-
 type StateSpec_BagSpec struct {
 	BagSpec *BagStateSpec `protobuf:"bytes,2,opt,name=bag_spec,json=bagSpec,proto3,oneof"`
 }
-
 type StateSpec_CombiningSpec struct {
 	CombiningSpec *CombiningStateSpec `protobuf:"bytes,3,opt,name=combining_spec,json=combiningSpec,proto3,oneof"`
 }
-
 type StateSpec_MapSpec struct {
 	MapSpec *MapStateSpec `protobuf:"bytes,4,opt,name=map_spec,json=mapSpec,proto3,oneof"`
 }
-
 type StateSpec_SetSpec struct {
 	SetSpec *SetStateSpec `protobuf:"bytes,5,opt,name=set_spec,json=setSpec,proto3,oneof"`
 }
 
-func (*StateSpec_ValueSpec) isStateSpec_Spec() {}
-
-func (*StateSpec_BagSpec) isStateSpec_Spec() {}
-
-func (*StateSpec_CombiningSpec) isStateSpec_Spec() {}
-
-func (*StateSpec_MapSpec) isStateSpec_Spec() {}
-
-func (*StateSpec_SetSpec) isStateSpec_Spec() {}
+func (*StateSpec_ReadModifyWriteSpec) isStateSpec_Spec() {}
+func (*StateSpec_BagSpec) isStateSpec_Spec()             {}
+func (*StateSpec_CombiningSpec) isStateSpec_Spec()       {}
+func (*StateSpec_MapSpec) isStateSpec_Spec()             {}
+func (*StateSpec_SetSpec) isStateSpec_Spec()             {}
 
 func (m *StateSpec) GetSpec() isStateSpec_Spec {
 	if m != nil {
@@ -2210,9 +1537,9 @@ func (m *StateSpec) GetSpec() isStateSpec_Spec {
 	return nil
 }
 
-func (m *StateSpec) GetValueSpec() *ValueStateSpec {
-	if x, ok := m.GetSpec().(*StateSpec_ValueSpec); ok {
-		return x.ValueSpec
+func (m *StateSpec) GetReadModifyWriteSpec() *ReadModifyWriteStateSpec {
+	if x, ok := m.GetSpec().(*StateSpec_ReadModifyWriteSpec); ok {
+		return x.ReadModifyWriteSpec
 	}
 	return nil
 }
@@ -2248,7 +1575,7 @@ func (m *StateSpec) GetSetSpec() *SetStateSpec {
 // XXX_OneofFuncs is for the internal use of the proto package.
 func (*StateSpec) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
 	return _StateSpec_OneofMarshaler, _StateSpec_OneofUnmarshaler, _StateSpec_OneofSizer, []interface{}{
-		(*StateSpec_ValueSpec)(nil),
+		(*StateSpec_ReadModifyWriteSpec)(nil),
 		(*StateSpec_BagSpec)(nil),
 		(*StateSpec_CombiningSpec)(nil),
 		(*StateSpec_MapSpec)(nil),
@@ -2260,9 +1587,9 @@ func _StateSpec_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 	m := msg.(*StateSpec)
 	// spec
 	switch x := m.Spec.(type) {
-	case *StateSpec_ValueSpec:
+	case *StateSpec_ReadModifyWriteSpec:
 		b.EncodeVarint(1<<3 | proto.WireBytes)
-		if err := b.EncodeMessage(x.ValueSpec); err != nil {
+		if err := b.EncodeMessage(x.ReadModifyWriteSpec); err != nil {
 			return err
 		}
 	case *StateSpec_BagSpec:
@@ -2295,13 +1622,13 @@ func _StateSpec_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
 func _StateSpec_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
 	m := msg.(*StateSpec)
 	switch tag {
-	case 1: // spec.value_spec
+	case 1: // spec.read_modify_write_spec
 		if wire != proto.WireBytes {
 			return true, proto.ErrInternalBadWireType
 		}
-		msg := new(ValueStateSpec)
+		msg := new(ReadModifyWriteStateSpec)
 		err := b.DecodeMessage(msg)
-		m.Spec = &StateSpec_ValueSpec{msg}
+		m.Spec = &StateSpec_ReadModifyWriteSpec{msg}
 		return true, err
 	case 2: // spec.bag_spec
 		if wire != proto.WireBytes {
@@ -2344,8 +1671,8 @@ func _StateSpec_OneofSizer(msg proto.Message) (n int) {
 	m := msg.(*StateSpec)
 	// spec
 	switch x := m.Spec.(type) {
-	case *StateSpec_ValueSpec:
-		s := proto.Size(x.ValueSpec)
+	case *StateSpec_ReadModifyWriteSpec:
+		s := proto.Size(x.ReadModifyWriteSpec)
 		n += 1 // tag and wire
 		n += proto.SizeVarint(uint64(s))
 		n += s
@@ -2376,39 +1703,38 @@ func _StateSpec_OneofSizer(msg proto.Message) (n int) {
 	return n
 }
 
-type ValueStateSpec struct {
+type ReadModifyWriteStateSpec struct {
 	CoderId              string   `protobuf:"bytes,1,opt,name=coder_id,json=coderId,proto3" json:"coder_id,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
 }
 
-func (m *ValueStateSpec) Reset()         { *m = ValueStateSpec{} }
-func (m *ValueStateSpec) String() string { return proto.CompactTextString(m) }
-func (*ValueStateSpec) ProtoMessage()    {}
-func (*ValueStateSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{12}
+func (m *ReadModifyWriteStateSpec) Reset()         { *m = ReadModifyWriteStateSpec{} }
+func (m *ReadModifyWriteStateSpec) String() string { return proto.CompactTextString(m) }
+func (*ReadModifyWriteStateSpec) ProtoMessage()    {}
+func (*ReadModifyWriteStateSpec) Descriptor() ([]byte, []int) {
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{10}
+}
+func (m *ReadModifyWriteStateSpec) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ReadModifyWriteStateSpec.Unmarshal(m, b)
+}
+func (m *ReadModifyWriteStateSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ReadModifyWriteStateSpec.Marshal(b, m, deterministic)
+}
+func (dst *ReadModifyWriteStateSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReadModifyWriteStateSpec.Merge(dst, src)
+}
+func (m *ReadModifyWriteStateSpec) XXX_Size() int {
+	return xxx_messageInfo_ReadModifyWriteStateSpec.Size(m)
+}
+func (m *ReadModifyWriteStateSpec) XXX_DiscardUnknown() {
+	xxx_messageInfo_ReadModifyWriteStateSpec.DiscardUnknown(m)
 }
 
-func (m *ValueStateSpec) XXX_Unmarshal(b []byte) error {
-	return xxx_messageInfo_ValueStateSpec.Unmarshal(m, b)
-}
-func (m *ValueStateSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	return xxx_messageInfo_ValueStateSpec.Marshal(b, m, deterministic)
-}
-func (m *ValueStateSpec) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ValueStateSpec.Merge(m, src)
-}
-func (m *ValueStateSpec) XXX_Size() int {
-	return xxx_messageInfo_ValueStateSpec.Size(m)
-}
-func (m *ValueStateSpec) XXX_DiscardUnknown() {
-	xxx_messageInfo_ValueStateSpec.DiscardUnknown(m)
-}
+var xxx_messageInfo_ReadModifyWriteStateSpec proto.InternalMessageInfo
 
-var xxx_messageInfo_ValueStateSpec proto.InternalMessageInfo
-
-func (m *ValueStateSpec) GetCoderId() string {
+func (m *ReadModifyWriteStateSpec) GetCoderId() string {
 	if m != nil {
 		return m.CoderId
 	}
@@ -2426,17 +1752,16 @@ func (m *BagStateSpec) Reset()         { *m = BagStateSpec{} }
 func (m *BagStateSpec) String() string { return proto.CompactTextString(m) }
 func (*BagStateSpec) ProtoMessage()    {}
 func (*BagStateSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{13}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{11}
 }
-
 func (m *BagStateSpec) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_BagStateSpec.Unmarshal(m, b)
 }
 func (m *BagStateSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_BagStateSpec.Marshal(b, m, deterministic)
 }
-func (m *BagStateSpec) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_BagStateSpec.Merge(m, src)
+func (dst *BagStateSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BagStateSpec.Merge(dst, src)
 }
 func (m *BagStateSpec) XXX_Size() int {
 	return xxx_messageInfo_BagStateSpec.Size(m)
@@ -2466,17 +1791,16 @@ func (m *CombiningStateSpec) Reset()         { *m = CombiningStateSpec{} }
 func (m *CombiningStateSpec) String() string { return proto.CompactTextString(m) }
 func (*CombiningStateSpec) ProtoMessage()    {}
 func (*CombiningStateSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{14}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{12}
 }
-
 func (m *CombiningStateSpec) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_CombiningStateSpec.Unmarshal(m, b)
 }
 func (m *CombiningStateSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_CombiningStateSpec.Marshal(b, m, deterministic)
 }
-func (m *CombiningStateSpec) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_CombiningStateSpec.Merge(m, src)
+func (dst *CombiningStateSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CombiningStateSpec.Merge(dst, src)
 }
 func (m *CombiningStateSpec) XXX_Size() int {
 	return xxx_messageInfo_CombiningStateSpec.Size(m)
@@ -2513,17 +1837,16 @@ func (m *MapStateSpec) Reset()         { *m = MapStateSpec{} }
 func (m *MapStateSpec) String() string { return proto.CompactTextString(m) }
 func (*MapStateSpec) ProtoMessage()    {}
 func (*MapStateSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{15}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{13}
 }
-
 func (m *MapStateSpec) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_MapStateSpec.Unmarshal(m, b)
 }
 func (m *MapStateSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_MapStateSpec.Marshal(b, m, deterministic)
 }
-func (m *MapStateSpec) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_MapStateSpec.Merge(m, src)
+func (dst *MapStateSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MapStateSpec.Merge(dst, src)
 }
 func (m *MapStateSpec) XXX_Size() int {
 	return xxx_messageInfo_MapStateSpec.Size(m)
@@ -2559,17 +1882,16 @@ func (m *SetStateSpec) Reset()         { *m = SetStateSpec{} }
 func (m *SetStateSpec) String() string { return proto.CompactTextString(m) }
 func (*SetStateSpec) ProtoMessage()    {}
 func (*SetStateSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{16}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{14}
 }
-
 func (m *SetStateSpec) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SetStateSpec.Unmarshal(m, b)
 }
 func (m *SetStateSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_SetStateSpec.Marshal(b, m, deterministic)
 }
-func (m *SetStateSpec) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SetStateSpec.Merge(m, src)
+func (dst *SetStateSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SetStateSpec.Merge(dst, src)
 }
 func (m *SetStateSpec) XXX_Size() int {
 	return xxx_messageInfo_SetStateSpec.Size(m)
@@ -2599,17 +1921,16 @@ func (m *TimerSpec) Reset()         { *m = TimerSpec{} }
 func (m *TimerSpec) String() string { return proto.CompactTextString(m) }
 func (*TimerSpec) ProtoMessage()    {}
 func (*TimerSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{17}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{15}
 }
-
 func (m *TimerSpec) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_TimerSpec.Unmarshal(m, b)
 }
 func (m *TimerSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_TimerSpec.Marshal(b, m, deterministic)
 }
-func (m *TimerSpec) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TimerSpec.Merge(m, src)
+func (dst *TimerSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TimerSpec.Merge(dst, src)
 }
 func (m *TimerSpec) XXX_Size() int {
 	return xxx_messageInfo_TimerSpec.Size(m)
@@ -2644,17 +1965,16 @@ func (m *IsBounded) Reset()         { *m = IsBounded{} }
 func (m *IsBounded) String() string { return proto.CompactTextString(m) }
 func (*IsBounded) ProtoMessage()    {}
 func (*IsBounded) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{18}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{16}
 }
-
 func (m *IsBounded) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_IsBounded.Unmarshal(m, b)
 }
 func (m *IsBounded) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_IsBounded.Marshal(b, m, deterministic)
 }
-func (m *IsBounded) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_IsBounded.Merge(m, src)
+func (dst *IsBounded) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_IsBounded.Merge(dst, src)
 }
 func (m *IsBounded) XXX_Size() int {
 	return xxx_messageInfo_IsBounded.Size(m)
@@ -2680,17 +2000,16 @@ func (m *ReadPayload) Reset()         { *m = ReadPayload{} }
 func (m *ReadPayload) String() string { return proto.CompactTextString(m) }
 func (*ReadPayload) ProtoMessage()    {}
 func (*ReadPayload) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{19}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{17}
 }
-
 func (m *ReadPayload) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ReadPayload.Unmarshal(m, b)
 }
 func (m *ReadPayload) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_ReadPayload.Marshal(b, m, deterministic)
 }
-func (m *ReadPayload) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ReadPayload.Merge(m, src)
+func (dst *ReadPayload) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ReadPayload.Merge(dst, src)
 }
 func (m *ReadPayload) XXX_Size() int {
 	return xxx_messageInfo_ReadPayload.Size(m)
@@ -2728,17 +2047,16 @@ func (m *WindowIntoPayload) Reset()         { *m = WindowIntoPayload{} }
 func (m *WindowIntoPayload) String() string { return proto.CompactTextString(m) }
 func (*WindowIntoPayload) ProtoMessage()    {}
 func (*WindowIntoPayload) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{20}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{18}
 }
-
 func (m *WindowIntoPayload) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_WindowIntoPayload.Unmarshal(m, b)
 }
 func (m *WindowIntoPayload) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_WindowIntoPayload.Marshal(b, m, deterministic)
 }
-func (m *WindowIntoPayload) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_WindowIntoPayload.Merge(m, src)
+func (dst *WindowIntoPayload) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WindowIntoPayload.Merge(dst, src)
 }
 func (m *WindowIntoPayload) XXX_Size() int {
 	return xxx_messageInfo_WindowIntoPayload.Size(m)
@@ -2771,17 +2089,16 @@ func (m *CombinePayload) Reset()         { *m = CombinePayload{} }
 func (m *CombinePayload) String() string { return proto.CompactTextString(m) }
 func (*CombinePayload) ProtoMessage()    {}
 func (*CombinePayload) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{21}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{19}
 }
-
 func (m *CombinePayload) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_CombinePayload.Unmarshal(m, b)
 }
 func (m *CombinePayload) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_CombinePayload.Marshal(b, m, deterministic)
 }
-func (m *CombinePayload) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_CombinePayload.Merge(m, src)
+func (dst *CombinePayload) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_CombinePayload.Merge(dst, src)
 }
 func (m *CombinePayload) XXX_Size() int {
 	return xxx_messageInfo_CombinePayload.Size(m)
@@ -2809,28 +2126,31 @@ func (m *CombinePayload) GetAccumulatorCoderId() string {
 // The payload for the test-only primitive TestStream
 type TestStreamPayload struct {
 	// (Required) the coder for elements in the TestStream events
-	CoderId              string                     `protobuf:"bytes,1,opt,name=coder_id,json=coderId,proto3" json:"coder_id,omitempty"`
-	Events               []*TestStreamPayload_Event `protobuf:"bytes,2,rep,name=events,proto3" json:"events,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                   `json:"-"`
-	XXX_unrecognized     []byte                     `json:"-"`
-	XXX_sizecache        int32                      `json:"-"`
+	CoderId string `protobuf:"bytes,1,opt,name=coder_id,json=coderId,proto3" json:"coder_id,omitempty"`
+	// (Optional) If specified, the TestStream will replay these events.
+	Events []*TestStreamPayload_Event `protobuf:"bytes,2,rep,name=events,proto3" json:"events,omitempty"`
+	// (Optional) If specified, points to a TestStreamService to be
+	// used to retrieve events.
+	Endpoint             *ApiServiceDescriptor `protobuf:"bytes,3,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
+	XXX_unrecognized     []byte                `json:"-"`
+	XXX_sizecache        int32                 `json:"-"`
 }
 
 func (m *TestStreamPayload) Reset()         { *m = TestStreamPayload{} }
 func (m *TestStreamPayload) String() string { return proto.CompactTextString(m) }
 func (*TestStreamPayload) ProtoMessage()    {}
 func (*TestStreamPayload) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{22}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{20}
 }
-
 func (m *TestStreamPayload) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_TestStreamPayload.Unmarshal(m, b)
 }
 func (m *TestStreamPayload) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_TestStreamPayload.Marshal(b, m, deterministic)
 }
-func (m *TestStreamPayload) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TestStreamPayload.Merge(m, src)
+func (dst *TestStreamPayload) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TestStreamPayload.Merge(dst, src)
 }
 func (m *TestStreamPayload) XXX_Size() int {
 	return xxx_messageInfo_TestStreamPayload.Size(m)
@@ -2855,6 +2175,13 @@ func (m *TestStreamPayload) GetEvents() []*TestStreamPayload_Event {
 	return nil
 }
 
+func (m *TestStreamPayload) GetEndpoint() *ApiServiceDescriptor {
+	if m != nil {
+		return m.Endpoint
+	}
+	return nil
+}
+
 type TestStreamPayload_Event struct {
 	// Types that are valid to be assigned to Event:
 	//	*TestStreamPayload_Event_WatermarkEvent
@@ -2870,17 +2197,16 @@ func (m *TestStreamPayload_Event) Reset()         { *m = TestStreamPayload_Event
 func (m *TestStreamPayload_Event) String() string { return proto.CompactTextString(m) }
 func (*TestStreamPayload_Event) ProtoMessage()    {}
 func (*TestStreamPayload_Event) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{22, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{20, 0}
 }
-
 func (m *TestStreamPayload_Event) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_TestStreamPayload_Event.Unmarshal(m, b)
 }
 func (m *TestStreamPayload_Event) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_TestStreamPayload_Event.Marshal(b, m, deterministic)
 }
-func (m *TestStreamPayload_Event) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TestStreamPayload_Event.Merge(m, src)
+func (dst *TestStreamPayload_Event) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TestStreamPayload_Event.Merge(dst, src)
 }
 func (m *TestStreamPayload_Event) XXX_Size() int {
 	return xxx_messageInfo_TestStreamPayload_Event.Size(m)
@@ -2898,20 +2224,16 @@ type isTestStreamPayload_Event_Event interface {
 type TestStreamPayload_Event_WatermarkEvent struct {
 	WatermarkEvent *TestStreamPayload_Event_AdvanceWatermark `protobuf:"bytes,1,opt,name=watermark_event,json=watermarkEvent,proto3,oneof"`
 }
-
 type TestStreamPayload_Event_ProcessingTimeEvent struct {
 	ProcessingTimeEvent *TestStreamPayload_Event_AdvanceProcessingTime `protobuf:"bytes,2,opt,name=processing_time_event,json=processingTimeEvent,proto3,oneof"`
 }
-
 type TestStreamPayload_Event_ElementEvent struct {
 	ElementEvent *TestStreamPayload_Event_AddElements `protobuf:"bytes,3,opt,name=element_event,json=elementEvent,proto3,oneof"`
 }
 
-func (*TestStreamPayload_Event_WatermarkEvent) isTestStreamPayload_Event_Event() {}
-
+func (*TestStreamPayload_Event_WatermarkEvent) isTestStreamPayload_Event_Event()      {}
 func (*TestStreamPayload_Event_ProcessingTimeEvent) isTestStreamPayload_Event_Event() {}
-
-func (*TestStreamPayload_Event_ElementEvent) isTestStreamPayload_Event_Event() {}
+func (*TestStreamPayload_Event_ElementEvent) isTestStreamPayload_Event_Event()        {}
 
 func (m *TestStreamPayload_Event) GetEvent() isTestStreamPayload_Event_Event {
 	if m != nil {
@@ -3034,8 +2356,14 @@ func _TestStreamPayload_Event_OneofSizer(msg proto.Message) (n int) {
 	return n
 }
 
+// Advances the watermark to the specified timestamp.
 type TestStreamPayload_Event_AdvanceWatermark struct {
-	NewWatermark         int64    `protobuf:"varint,1,opt,name=new_watermark,json=newWatermark,proto3" json:"new_watermark,omitempty"`
+	// (Required) The watermark to advance to.
+	NewWatermark int64 `protobuf:"varint,1,opt,name=new_watermark,json=newWatermark,proto3" json:"new_watermark,omitempty"`
+	// (Optional) The output watermark tag for a PCollection. If unspecified
+	// or with an empty string, this will default to the Main PCollection
+	// Output
+	Tag                  string   `protobuf:"bytes,2,opt,name=tag,proto3" json:"tag,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -3047,17 +2375,16 @@ func (m *TestStreamPayload_Event_AdvanceWatermark) Reset() {
 func (m *TestStreamPayload_Event_AdvanceWatermark) String() string { return proto.CompactTextString(m) }
 func (*TestStreamPayload_Event_AdvanceWatermark) ProtoMessage()    {}
 func (*TestStreamPayload_Event_AdvanceWatermark) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{22, 0, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{20, 0, 0}
 }
-
 func (m *TestStreamPayload_Event_AdvanceWatermark) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_TestStreamPayload_Event_AdvanceWatermark.Unmarshal(m, b)
 }
 func (m *TestStreamPayload_Event_AdvanceWatermark) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_TestStreamPayload_Event_AdvanceWatermark.Marshal(b, m, deterministic)
 }
-func (m *TestStreamPayload_Event_AdvanceWatermark) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TestStreamPayload_Event_AdvanceWatermark.Merge(m, src)
+func (dst *TestStreamPayload_Event_AdvanceWatermark) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TestStreamPayload_Event_AdvanceWatermark.Merge(dst, src)
 }
 func (m *TestStreamPayload_Event_AdvanceWatermark) XXX_Size() int {
 	return xxx_messageInfo_TestStreamPayload_Event_AdvanceWatermark.Size(m)
@@ -3075,7 +2402,16 @@ func (m *TestStreamPayload_Event_AdvanceWatermark) GetNewWatermark() int64 {
 	return 0
 }
 
+func (m *TestStreamPayload_Event_AdvanceWatermark) GetTag() string {
+	if m != nil {
+		return m.Tag
+	}
+	return ""
+}
+
+// Advances the processing time clock by the specified amount.
 type TestStreamPayload_Event_AdvanceProcessingTime struct {
+	// (Required) The duration to advance by.
 	AdvanceDuration      int64    `protobuf:"varint,1,opt,name=advance_duration,json=advanceDuration,proto3" json:"advance_duration,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
@@ -3090,17 +2426,16 @@ func (m *TestStreamPayload_Event_AdvanceProcessingTime) String() string {
 }
 func (*TestStreamPayload_Event_AdvanceProcessingTime) ProtoMessage() {}
 func (*TestStreamPayload_Event_AdvanceProcessingTime) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{22, 0, 1}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{20, 0, 1}
 }
-
 func (m *TestStreamPayload_Event_AdvanceProcessingTime) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_TestStreamPayload_Event_AdvanceProcessingTime.Unmarshal(m, b)
 }
 func (m *TestStreamPayload_Event_AdvanceProcessingTime) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_TestStreamPayload_Event_AdvanceProcessingTime.Marshal(b, m, deterministic)
 }
-func (m *TestStreamPayload_Event_AdvanceProcessingTime) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TestStreamPayload_Event_AdvanceProcessingTime.Merge(m, src)
+func (dst *TestStreamPayload_Event_AdvanceProcessingTime) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TestStreamPayload_Event_AdvanceProcessingTime.Merge(dst, src)
 }
 func (m *TestStreamPayload_Event_AdvanceProcessingTime) XXX_Size() int {
 	return xxx_messageInfo_TestStreamPayload_Event_AdvanceProcessingTime.Size(m)
@@ -3118,28 +2453,33 @@ func (m *TestStreamPayload_Event_AdvanceProcessingTime) GetAdvanceDuration() int
 	return 0
 }
 
+// Adds elements to the stream to be emitted.
 type TestStreamPayload_Event_AddElements struct {
-	Elements             []*TestStreamPayload_TimestampedElement `protobuf:"bytes,1,rep,name=elements,proto3" json:"elements,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}                                `json:"-"`
-	XXX_unrecognized     []byte                                  `json:"-"`
-	XXX_sizecache        int32                                   `json:"-"`
+	// (Required) The elements to add to the TestStream.
+	Elements []*TestStreamPayload_TimestampedElement `protobuf:"bytes,1,rep,name=elements,proto3" json:"elements,omitempty"`
+	// (Optional) The output PCollection tag to add these elements to. If
+	// unspecified or with an empty string, this will default to the Main
+	// PCollection Output.
+	Tag                  string   `protobuf:"bytes,3,opt,name=tag,proto3" json:"tag,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *TestStreamPayload_Event_AddElements) Reset()         { *m = TestStreamPayload_Event_AddElements{} }
 func (m *TestStreamPayload_Event_AddElements) String() string { return proto.CompactTextString(m) }
 func (*TestStreamPayload_Event_AddElements) ProtoMessage()    {}
 func (*TestStreamPayload_Event_AddElements) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{22, 0, 2}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{20, 0, 2}
 }
-
 func (m *TestStreamPayload_Event_AddElements) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_TestStreamPayload_Event_AddElements.Unmarshal(m, b)
 }
 func (m *TestStreamPayload_Event_AddElements) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_TestStreamPayload_Event_AddElements.Marshal(b, m, deterministic)
 }
-func (m *TestStreamPayload_Event_AddElements) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TestStreamPayload_Event_AddElements.Merge(m, src)
+func (dst *TestStreamPayload_Event_AddElements) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TestStreamPayload_Event_AddElements.Merge(dst, src)
 }
 func (m *TestStreamPayload_Event_AddElements) XXX_Size() int {
 	return xxx_messageInfo_TestStreamPayload_Event_AddElements.Size(m)
@@ -3157,8 +2497,19 @@ func (m *TestStreamPayload_Event_AddElements) GetElements() []*TestStreamPayload
 	return nil
 }
 
+func (m *TestStreamPayload_Event_AddElements) GetTag() string {
+	if m != nil {
+		return m.Tag
+	}
+	return ""
+}
+
+// A single element inside of the TestStream.
 type TestStreamPayload_TimestampedElement struct {
-	EncodedElement       []byte   `protobuf:"bytes,1,opt,name=encoded_element,json=encodedElement,proto3" json:"encoded_element,omitempty"`
+	// (Required) The element encoded. Currently the TestStream only supports
+	// encoding primitives.
+	EncodedElement []byte `protobuf:"bytes,1,opt,name=encoded_element,json=encodedElement,proto3" json:"encoded_element,omitempty"`
+	// (Required) The event timestamp of this element.
 	Timestamp            int64    `protobuf:"varint,2,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_unrecognized     []byte   `json:"-"`
@@ -3169,17 +2520,16 @@ func (m *TestStreamPayload_TimestampedElement) Reset()         { *m = TestStream
 func (m *TestStreamPayload_TimestampedElement) String() string { return proto.CompactTextString(m) }
 func (*TestStreamPayload_TimestampedElement) ProtoMessage()    {}
 func (*TestStreamPayload_TimestampedElement) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{22, 1}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{20, 1}
 }
-
 func (m *TestStreamPayload_TimestampedElement) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_TestStreamPayload_TimestampedElement.Unmarshal(m, b)
 }
 func (m *TestStreamPayload_TimestampedElement) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_TestStreamPayload_TimestampedElement.Marshal(b, m, deterministic)
 }
-func (m *TestStreamPayload_TimestampedElement) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TestStreamPayload_TimestampedElement.Merge(m, src)
+func (dst *TestStreamPayload_TimestampedElement) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TestStreamPayload_TimestampedElement.Merge(dst, src)
 }
 func (m *TestStreamPayload_TimestampedElement) XXX_Size() int {
 	return xxx_messageInfo_TestStreamPayload_TimestampedElement.Size(m)
@@ -3204,6 +2554,36 @@ func (m *TestStreamPayload_TimestampedElement) GetTimestamp() int64 {
 	return 0
 }
 
+type EventsRequest struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *EventsRequest) Reset()         { *m = EventsRequest{} }
+func (m *EventsRequest) String() string { return proto.CompactTextString(m) }
+func (*EventsRequest) ProtoMessage()    {}
+func (*EventsRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{21}
+}
+func (m *EventsRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_EventsRequest.Unmarshal(m, b)
+}
+func (m *EventsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_EventsRequest.Marshal(b, m, deterministic)
+}
+func (dst *EventsRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_EventsRequest.Merge(dst, src)
+}
+func (m *EventsRequest) XXX_Size() int {
+	return xxx_messageInfo_EventsRequest.Size(m)
+}
+func (m *EventsRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_EventsRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_EventsRequest proto.InternalMessageInfo
+
 // The payload for the special-but-not-primitive WriteFiles transform.
 type WriteFilesPayload struct {
 	// (Required) The SdkFunctionSpec of the FileBasedSink.
@@ -3222,17 +2602,16 @@ func (m *WriteFilesPayload) Reset()         { *m = WriteFilesPayload{} }
 func (m *WriteFilesPayload) String() string { return proto.CompactTextString(m) }
 func (*WriteFilesPayload) ProtoMessage()    {}
 func (*WriteFilesPayload) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{23}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{22}
 }
-
 func (m *WriteFilesPayload) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_WriteFilesPayload.Unmarshal(m, b)
 }
 func (m *WriteFilesPayload) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_WriteFilesPayload.Marshal(b, m, deterministic)
 }
-func (m *WriteFilesPayload) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_WriteFilesPayload.Merge(m, src)
+func (dst *WriteFilesPayload) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WriteFilesPayload.Merge(dst, src)
 }
 func (m *WriteFilesPayload) XXX_Size() int {
 	return xxx_messageInfo_WriteFilesPayload.Size(m)
@@ -3285,8 +2664,8 @@ type Coder struct {
 	// may be a cross-language agreed-upon format, or it may be a "custom coder"
 	// that can only be used by a particular SDK. It does not include component
 	// coders, as it is beneficial for these to be comprehensible to a runner
-	// regardless of whether the binary format is agree-upon.
-	Spec *SdkFunctionSpec `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
+	// regardless of whether the binary format is agreed-upon.
+	Spec *FunctionSpec `protobuf:"bytes,1,opt,name=spec,proto3" json:"spec,omitempty"`
 	// (Optional) If this coder is parametric, such as ListCoder(VarIntCoder),
 	// this is a list of the components. In order for encodings to be identical,
 	// the SdkFunctionSpec and all components must be identical, recursively.
@@ -3300,17 +2679,16 @@ func (m *Coder) Reset()         { *m = Coder{} }
 func (m *Coder) String() string { return proto.CompactTextString(m) }
 func (*Coder) ProtoMessage()    {}
 func (*Coder) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{24}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{23}
 }
-
 func (m *Coder) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Coder.Unmarshal(m, b)
 }
 func (m *Coder) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Coder.Marshal(b, m, deterministic)
 }
-func (m *Coder) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Coder.Merge(m, src)
+func (dst *Coder) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Coder.Merge(dst, src)
 }
 func (m *Coder) XXX_Size() int {
 	return xxx_messageInfo_Coder.Size(m)
@@ -3321,7 +2699,7 @@ func (m *Coder) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Coder proto.InternalMessageInfo
 
-func (m *Coder) GetSpec() *SdkFunctionSpec {
+func (m *Coder) GetSpec() *FunctionSpec {
 	if m != nil {
 		return m.Spec
 	}
@@ -3345,17 +2723,16 @@ func (m *StandardCoders) Reset()         { *m = StandardCoders{} }
 func (m *StandardCoders) String() string { return proto.CompactTextString(m) }
 func (*StandardCoders) ProtoMessage()    {}
 func (*StandardCoders) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{25}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{24}
 }
-
 func (m *StandardCoders) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_StandardCoders.Unmarshal(m, b)
 }
 func (m *StandardCoders) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_StandardCoders.Marshal(b, m, deterministic)
 }
-func (m *StandardCoders) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StandardCoders.Merge(m, src)
+func (dst *StandardCoders) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StandardCoders.Merge(dst, src)
 }
 func (m *StandardCoders) XXX_Size() int {
 	return xxx_messageInfo_StandardCoders.Size(m)
@@ -3417,17 +2794,16 @@ func (m *WindowingStrategy) Reset()         { *m = WindowingStrategy{} }
 func (m *WindowingStrategy) String() string { return proto.CompactTextString(m) }
 func (*WindowingStrategy) ProtoMessage()    {}
 func (*WindowingStrategy) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{26}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{25}
 }
-
 func (m *WindowingStrategy) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_WindowingStrategy.Unmarshal(m, b)
 }
 func (m *WindowingStrategy) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_WindowingStrategy.Marshal(b, m, deterministic)
 }
-func (m *WindowingStrategy) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_WindowingStrategy.Merge(m, src)
+func (dst *WindowingStrategy) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_WindowingStrategy.Merge(dst, src)
 }
 func (m *WindowingStrategy) XXX_Size() int {
 	return xxx_messageInfo_WindowingStrategy.Size(m)
@@ -3521,17 +2897,16 @@ func (m *MergeStatus) Reset()         { *m = MergeStatus{} }
 func (m *MergeStatus) String() string { return proto.CompactTextString(m) }
 func (*MergeStatus) ProtoMessage()    {}
 func (*MergeStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{27}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{26}
 }
-
 func (m *MergeStatus) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_MergeStatus.Unmarshal(m, b)
 }
 func (m *MergeStatus) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_MergeStatus.Marshal(b, m, deterministic)
 }
-func (m *MergeStatus) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_MergeStatus.Merge(m, src)
+func (dst *MergeStatus) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MergeStatus.Merge(dst, src)
 }
 func (m *MergeStatus) XXX_Size() int {
 	return xxx_messageInfo_MergeStatus.Size(m)
@@ -3555,17 +2930,16 @@ func (m *AccumulationMode) Reset()         { *m = AccumulationMode{} }
 func (m *AccumulationMode) String() string { return proto.CompactTextString(m) }
 func (*AccumulationMode) ProtoMessage()    {}
 func (*AccumulationMode) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{28}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{27}
 }
-
 func (m *AccumulationMode) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_AccumulationMode.Unmarshal(m, b)
 }
 func (m *AccumulationMode) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_AccumulationMode.Marshal(b, m, deterministic)
 }
-func (m *AccumulationMode) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_AccumulationMode.Merge(m, src)
+func (dst *AccumulationMode) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AccumulationMode.Merge(dst, src)
 }
 func (m *AccumulationMode) XXX_Size() int {
 	return xxx_messageInfo_AccumulationMode.Size(m)
@@ -3588,17 +2962,16 @@ func (m *ClosingBehavior) Reset()         { *m = ClosingBehavior{} }
 func (m *ClosingBehavior) String() string { return proto.CompactTextString(m) }
 func (*ClosingBehavior) ProtoMessage()    {}
 func (*ClosingBehavior) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{29}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{28}
 }
-
 func (m *ClosingBehavior) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ClosingBehavior.Unmarshal(m, b)
 }
 func (m *ClosingBehavior) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_ClosingBehavior.Marshal(b, m, deterministic)
 }
-func (m *ClosingBehavior) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ClosingBehavior.Merge(m, src)
+func (dst *ClosingBehavior) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ClosingBehavior.Merge(dst, src)
 }
 func (m *ClosingBehavior) XXX_Size() int {
 	return xxx_messageInfo_ClosingBehavior.Size(m)
@@ -3621,17 +2994,16 @@ func (m *OnTimeBehavior) Reset()         { *m = OnTimeBehavior{} }
 func (m *OnTimeBehavior) String() string { return proto.CompactTextString(m) }
 func (*OnTimeBehavior) ProtoMessage()    {}
 func (*OnTimeBehavior) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{30}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{29}
 }
-
 func (m *OnTimeBehavior) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_OnTimeBehavior.Unmarshal(m, b)
 }
 func (m *OnTimeBehavior) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_OnTimeBehavior.Marshal(b, m, deterministic)
 }
-func (m *OnTimeBehavior) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_OnTimeBehavior.Merge(m, src)
+func (dst *OnTimeBehavior) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_OnTimeBehavior.Merge(dst, src)
 }
 func (m *OnTimeBehavior) XXX_Size() int {
 	return xxx_messageInfo_OnTimeBehavior.Size(m)
@@ -3654,17 +3026,16 @@ func (m *OutputTime) Reset()         { *m = OutputTime{} }
 func (m *OutputTime) String() string { return proto.CompactTextString(m) }
 func (*OutputTime) ProtoMessage()    {}
 func (*OutputTime) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{31}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{30}
 }
-
 func (m *OutputTime) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_OutputTime.Unmarshal(m, b)
 }
 func (m *OutputTime) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_OutputTime.Marshal(b, m, deterministic)
 }
-func (m *OutputTime) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_OutputTime.Merge(m, src)
+func (dst *OutputTime) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_OutputTime.Merge(dst, src)
 }
 func (m *OutputTime) XXX_Size() int {
 	return xxx_messageInfo_OutputTime.Size(m)
@@ -3686,17 +3057,16 @@ func (m *TimeDomain) Reset()         { *m = TimeDomain{} }
 func (m *TimeDomain) String() string { return proto.CompactTextString(m) }
 func (*TimeDomain) ProtoMessage()    {}
 func (*TimeDomain) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{32}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{31}
 }
-
 func (m *TimeDomain) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_TimeDomain.Unmarshal(m, b)
 }
 func (m *TimeDomain) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_TimeDomain.Marshal(b, m, deterministic)
 }
-func (m *TimeDomain) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TimeDomain.Merge(m, src)
+func (dst *TimeDomain) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TimeDomain.Merge(dst, src)
 }
 func (m *TimeDomain) XXX_Size() int {
 	return xxx_messageInfo_TimeDomain.Size(m)
@@ -3737,17 +3107,16 @@ func (m *Trigger) Reset()         { *m = Trigger{} }
 func (m *Trigger) String() string { return proto.CompactTextString(m) }
 func (*Trigger) ProtoMessage()    {}
 func (*Trigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{33}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{32}
 }
-
 func (m *Trigger) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Trigger.Unmarshal(m, b)
 }
 func (m *Trigger) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Trigger.Marshal(b, m, deterministic)
 }
-func (m *Trigger) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Trigger.Merge(m, src)
+func (dst *Trigger) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Trigger.Merge(dst, src)
 }
 func (m *Trigger) XXX_Size() int {
 	return xxx_messageInfo_Trigger.Size(m)
@@ -3765,74 +3134,52 @@ type isTrigger_Trigger interface {
 type Trigger_AfterAll_ struct {
 	AfterAll *Trigger_AfterAll `protobuf:"bytes,1,opt,name=after_all,json=afterAll,proto3,oneof"`
 }
-
 type Trigger_AfterAny_ struct {
 	AfterAny *Trigger_AfterAny `protobuf:"bytes,2,opt,name=after_any,json=afterAny,proto3,oneof"`
 }
-
 type Trigger_AfterEach_ struct {
 	AfterEach *Trigger_AfterEach `protobuf:"bytes,3,opt,name=after_each,json=afterEach,proto3,oneof"`
 }
-
 type Trigger_AfterEndOfWindow_ struct {
 	AfterEndOfWindow *Trigger_AfterEndOfWindow `protobuf:"bytes,4,opt,name=after_end_of_window,json=afterEndOfWindow,proto3,oneof"`
 }
-
 type Trigger_AfterProcessingTime_ struct {
 	AfterProcessingTime *Trigger_AfterProcessingTime `protobuf:"bytes,5,opt,name=after_processing_time,json=afterProcessingTime,proto3,oneof"`
 }
-
 type Trigger_AfterSynchronizedProcessingTime_ struct {
 	AfterSynchronizedProcessingTime *Trigger_AfterSynchronizedProcessingTime `protobuf:"bytes,6,opt,name=after_synchronized_processing_time,json=afterSynchronizedProcessingTime,proto3,oneof"`
 }
-
 type Trigger_Always_ struct {
 	Always *Trigger_Always `protobuf:"bytes,12,opt,name=always,proto3,oneof"`
 }
-
 type Trigger_Default_ struct {
 	Default *Trigger_Default `protobuf:"bytes,7,opt,name=default,proto3,oneof"`
 }
-
 type Trigger_ElementCount_ struct {
 	ElementCount *Trigger_ElementCount `protobuf:"bytes,8,opt,name=element_count,json=elementCount,proto3,oneof"`
 }
-
 type Trigger_Never_ struct {
 	Never *Trigger_Never `protobuf:"bytes,9,opt,name=never,proto3,oneof"`
 }
-
 type Trigger_OrFinally_ struct {
 	OrFinally *Trigger_OrFinally `protobuf:"bytes,10,opt,name=or_finally,json=orFinally,proto3,oneof"`
 }
-
 type Trigger_Repeat_ struct {
 	Repeat *Trigger_Repeat `protobuf:"bytes,11,opt,name=repeat,proto3,oneof"`
 }
 
-func (*Trigger_AfterAll_) isTrigger_Trigger() {}
-
-func (*Trigger_AfterAny_) isTrigger_Trigger() {}
-
-func (*Trigger_AfterEach_) isTrigger_Trigger() {}
-
-func (*Trigger_AfterEndOfWindow_) isTrigger_Trigger() {}
-
-func (*Trigger_AfterProcessingTime_) isTrigger_Trigger() {}
-
+func (*Trigger_AfterAll_) isTrigger_Trigger()                        {}
+func (*Trigger_AfterAny_) isTrigger_Trigger()                        {}
+func (*Trigger_AfterEach_) isTrigger_Trigger()                       {}
+func (*Trigger_AfterEndOfWindow_) isTrigger_Trigger()                {}
+func (*Trigger_AfterProcessingTime_) isTrigger_Trigger()             {}
 func (*Trigger_AfterSynchronizedProcessingTime_) isTrigger_Trigger() {}
-
-func (*Trigger_Always_) isTrigger_Trigger() {}
-
-func (*Trigger_Default_) isTrigger_Trigger() {}
-
-func (*Trigger_ElementCount_) isTrigger_Trigger() {}
-
-func (*Trigger_Never_) isTrigger_Trigger() {}
-
-func (*Trigger_OrFinally_) isTrigger_Trigger() {}
-
-func (*Trigger_Repeat_) isTrigger_Trigger() {}
+func (*Trigger_Always_) isTrigger_Trigger()                          {}
+func (*Trigger_Default_) isTrigger_Trigger()                         {}
+func (*Trigger_ElementCount_) isTrigger_Trigger()                    {}
+func (*Trigger_Never_) isTrigger_Trigger()                           {}
+func (*Trigger_OrFinally_) isTrigger_Trigger()                       {}
+func (*Trigger_Repeat_) isTrigger_Trigger()                          {}
 
 func (m *Trigger) GetTrigger() isTrigger_Trigger {
 	if m != nil {
@@ -4201,17 +3548,16 @@ func (m *Trigger_AfterAll) Reset()         { *m = Trigger_AfterAll{} }
 func (m *Trigger_AfterAll) String() string { return proto.CompactTextString(m) }
 func (*Trigger_AfterAll) ProtoMessage()    {}
 func (*Trigger_AfterAll) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{33, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{32, 0}
 }
-
 func (m *Trigger_AfterAll) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Trigger_AfterAll.Unmarshal(m, b)
 }
 func (m *Trigger_AfterAll) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Trigger_AfterAll.Marshal(b, m, deterministic)
 }
-func (m *Trigger_AfterAll) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Trigger_AfterAll.Merge(m, src)
+func (dst *Trigger_AfterAll) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Trigger_AfterAll.Merge(dst, src)
 }
 func (m *Trigger_AfterAll) XXX_Size() int {
 	return xxx_messageInfo_Trigger_AfterAll.Size(m)
@@ -4241,17 +3587,16 @@ func (m *Trigger_AfterAny) Reset()         { *m = Trigger_AfterAny{} }
 func (m *Trigger_AfterAny) String() string { return proto.CompactTextString(m) }
 func (*Trigger_AfterAny) ProtoMessage()    {}
 func (*Trigger_AfterAny) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{33, 1}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{32, 1}
 }
-
 func (m *Trigger_AfterAny) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Trigger_AfterAny.Unmarshal(m, b)
 }
 func (m *Trigger_AfterAny) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Trigger_AfterAny.Marshal(b, m, deterministic)
 }
-func (m *Trigger_AfterAny) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Trigger_AfterAny.Merge(m, src)
+func (dst *Trigger_AfterAny) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Trigger_AfterAny.Merge(dst, src)
 }
 func (m *Trigger_AfterAny) XXX_Size() int {
 	return xxx_messageInfo_Trigger_AfterAny.Size(m)
@@ -4282,17 +3627,16 @@ func (m *Trigger_AfterEach) Reset()         { *m = Trigger_AfterEach{} }
 func (m *Trigger_AfterEach) String() string { return proto.CompactTextString(m) }
 func (*Trigger_AfterEach) ProtoMessage()    {}
 func (*Trigger_AfterEach) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{33, 2}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{32, 2}
 }
-
 func (m *Trigger_AfterEach) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Trigger_AfterEach.Unmarshal(m, b)
 }
 func (m *Trigger_AfterEach) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Trigger_AfterEach.Marshal(b, m, deterministic)
 }
-func (m *Trigger_AfterEach) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Trigger_AfterEach.Merge(m, src)
+func (dst *Trigger_AfterEach) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Trigger_AfterEach.Merge(dst, src)
 }
 func (m *Trigger_AfterEach) XXX_Size() int {
 	return xxx_messageInfo_Trigger_AfterEach.Size(m)
@@ -4329,17 +3673,16 @@ func (m *Trigger_AfterEndOfWindow) Reset()         { *m = Trigger_AfterEndOfWind
 func (m *Trigger_AfterEndOfWindow) String() string { return proto.CompactTextString(m) }
 func (*Trigger_AfterEndOfWindow) ProtoMessage()    {}
 func (*Trigger_AfterEndOfWindow) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{33, 3}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{32, 3}
 }
-
 func (m *Trigger_AfterEndOfWindow) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Trigger_AfterEndOfWindow.Unmarshal(m, b)
 }
 func (m *Trigger_AfterEndOfWindow) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Trigger_AfterEndOfWindow.Marshal(b, m, deterministic)
 }
-func (m *Trigger_AfterEndOfWindow) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Trigger_AfterEndOfWindow.Merge(m, src)
+func (dst *Trigger_AfterEndOfWindow) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Trigger_AfterEndOfWindow.Merge(dst, src)
 }
 func (m *Trigger_AfterEndOfWindow) XXX_Size() int {
 	return xxx_messageInfo_Trigger_AfterEndOfWindow.Size(m)
@@ -4378,17 +3721,16 @@ func (m *Trigger_AfterProcessingTime) Reset()         { *m = Trigger_AfterProces
 func (m *Trigger_AfterProcessingTime) String() string { return proto.CompactTextString(m) }
 func (*Trigger_AfterProcessingTime) ProtoMessage()    {}
 func (*Trigger_AfterProcessingTime) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{33, 4}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{32, 4}
 }
-
 func (m *Trigger_AfterProcessingTime) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Trigger_AfterProcessingTime.Unmarshal(m, b)
 }
 func (m *Trigger_AfterProcessingTime) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Trigger_AfterProcessingTime.Marshal(b, m, deterministic)
 }
-func (m *Trigger_AfterProcessingTime) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Trigger_AfterProcessingTime.Merge(m, src)
+func (dst *Trigger_AfterProcessingTime) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Trigger_AfterProcessingTime.Merge(dst, src)
 }
 func (m *Trigger_AfterProcessingTime) XXX_Size() int {
 	return xxx_messageInfo_Trigger_AfterProcessingTime.Size(m)
@@ -4420,17 +3762,16 @@ func (m *Trigger_AfterSynchronizedProcessingTime) Reset() {
 func (m *Trigger_AfterSynchronizedProcessingTime) String() string { return proto.CompactTextString(m) }
 func (*Trigger_AfterSynchronizedProcessingTime) ProtoMessage()    {}
 func (*Trigger_AfterSynchronizedProcessingTime) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{33, 5}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{32, 5}
 }
-
 func (m *Trigger_AfterSynchronizedProcessingTime) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Trigger_AfterSynchronizedProcessingTime.Unmarshal(m, b)
 }
 func (m *Trigger_AfterSynchronizedProcessingTime) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Trigger_AfterSynchronizedProcessingTime.Marshal(b, m, deterministic)
 }
-func (m *Trigger_AfterSynchronizedProcessingTime) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Trigger_AfterSynchronizedProcessingTime.Merge(m, src)
+func (dst *Trigger_AfterSynchronizedProcessingTime) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Trigger_AfterSynchronizedProcessingTime.Merge(dst, src)
 }
 func (m *Trigger_AfterSynchronizedProcessingTime) XXX_Size() int {
 	return xxx_messageInfo_Trigger_AfterSynchronizedProcessingTime.Size(m)
@@ -4453,17 +3794,16 @@ func (m *Trigger_Default) Reset()         { *m = Trigger_Default{} }
 func (m *Trigger_Default) String() string { return proto.CompactTextString(m) }
 func (*Trigger_Default) ProtoMessage()    {}
 func (*Trigger_Default) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{33, 6}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{32, 6}
 }
-
 func (m *Trigger_Default) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Trigger_Default.Unmarshal(m, b)
 }
 func (m *Trigger_Default) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Trigger_Default.Marshal(b, m, deterministic)
 }
-func (m *Trigger_Default) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Trigger_Default.Merge(m, src)
+func (dst *Trigger_Default) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Trigger_Default.Merge(dst, src)
 }
 func (m *Trigger_Default) XXX_Size() int {
 	return xxx_messageInfo_Trigger_Default.Size(m)
@@ -4486,17 +3826,16 @@ func (m *Trigger_ElementCount) Reset()         { *m = Trigger_ElementCount{} }
 func (m *Trigger_ElementCount) String() string { return proto.CompactTextString(m) }
 func (*Trigger_ElementCount) ProtoMessage()    {}
 func (*Trigger_ElementCount) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{33, 7}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{32, 7}
 }
-
 func (m *Trigger_ElementCount) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Trigger_ElementCount.Unmarshal(m, b)
 }
 func (m *Trigger_ElementCount) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Trigger_ElementCount.Marshal(b, m, deterministic)
 }
-func (m *Trigger_ElementCount) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Trigger_ElementCount.Merge(m, src)
+func (dst *Trigger_ElementCount) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Trigger_ElementCount.Merge(dst, src)
 }
 func (m *Trigger_ElementCount) XXX_Size() int {
 	return xxx_messageInfo_Trigger_ElementCount.Size(m)
@@ -4526,17 +3865,16 @@ func (m *Trigger_Never) Reset()         { *m = Trigger_Never{} }
 func (m *Trigger_Never) String() string { return proto.CompactTextString(m) }
 func (*Trigger_Never) ProtoMessage()    {}
 func (*Trigger_Never) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{33, 8}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{32, 8}
 }
-
 func (m *Trigger_Never) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Trigger_Never.Unmarshal(m, b)
 }
 func (m *Trigger_Never) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Trigger_Never.Marshal(b, m, deterministic)
 }
-func (m *Trigger_Never) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Trigger_Never.Merge(m, src)
+func (dst *Trigger_Never) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Trigger_Never.Merge(dst, src)
 }
 func (m *Trigger_Never) XXX_Size() int {
 	return xxx_messageInfo_Trigger_Never.Size(m)
@@ -4559,17 +3897,16 @@ func (m *Trigger_Always) Reset()         { *m = Trigger_Always{} }
 func (m *Trigger_Always) String() string { return proto.CompactTextString(m) }
 func (*Trigger_Always) ProtoMessage()    {}
 func (*Trigger_Always) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{33, 9}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{32, 9}
 }
-
 func (m *Trigger_Always) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Trigger_Always.Unmarshal(m, b)
 }
 func (m *Trigger_Always) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Trigger_Always.Marshal(b, m, deterministic)
 }
-func (m *Trigger_Always) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Trigger_Always.Merge(m, src)
+func (dst *Trigger_Always) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Trigger_Always.Merge(dst, src)
 }
 func (m *Trigger_Always) XXX_Size() int {
 	return xxx_messageInfo_Trigger_Always.Size(m)
@@ -4596,17 +3933,16 @@ func (m *Trigger_OrFinally) Reset()         { *m = Trigger_OrFinally{} }
 func (m *Trigger_OrFinally) String() string { return proto.CompactTextString(m) }
 func (*Trigger_OrFinally) ProtoMessage()    {}
 func (*Trigger_OrFinally) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{33, 10}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{32, 10}
 }
-
 func (m *Trigger_OrFinally) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Trigger_OrFinally.Unmarshal(m, b)
 }
 func (m *Trigger_OrFinally) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Trigger_OrFinally.Marshal(b, m, deterministic)
 }
-func (m *Trigger_OrFinally) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Trigger_OrFinally.Merge(m, src)
+func (dst *Trigger_OrFinally) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Trigger_OrFinally.Merge(dst, src)
 }
 func (m *Trigger_OrFinally) XXX_Size() int {
 	return xxx_messageInfo_Trigger_OrFinally.Size(m)
@@ -4645,17 +3981,16 @@ func (m *Trigger_Repeat) Reset()         { *m = Trigger_Repeat{} }
 func (m *Trigger_Repeat) String() string { return proto.CompactTextString(m) }
 func (*Trigger_Repeat) ProtoMessage()    {}
 func (*Trigger_Repeat) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{33, 11}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{32, 11}
 }
-
 func (m *Trigger_Repeat) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Trigger_Repeat.Unmarshal(m, b)
 }
 func (m *Trigger_Repeat) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Trigger_Repeat.Marshal(b, m, deterministic)
 }
-func (m *Trigger_Repeat) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Trigger_Repeat.Merge(m, src)
+func (dst *Trigger_Repeat) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Trigger_Repeat.Merge(dst, src)
 }
 func (m *Trigger_Repeat) XXX_Size() int {
 	return xxx_messageInfo_Trigger_Repeat.Size(m)
@@ -4691,17 +4026,16 @@ func (m *TimestampTransform) Reset()         { *m = TimestampTransform{} }
 func (m *TimestampTransform) String() string { return proto.CompactTextString(m) }
 func (*TimestampTransform) ProtoMessage()    {}
 func (*TimestampTransform) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{34}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{33}
 }
-
 func (m *TimestampTransform) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_TimestampTransform.Unmarshal(m, b)
 }
 func (m *TimestampTransform) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_TimestampTransform.Marshal(b, m, deterministic)
 }
-func (m *TimestampTransform) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TimestampTransform.Merge(m, src)
+func (dst *TimestampTransform) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TimestampTransform.Merge(dst, src)
 }
 func (m *TimestampTransform) XXX_Size() int {
 	return xxx_messageInfo_TimestampTransform.Size(m)
@@ -4719,13 +4053,11 @@ type isTimestampTransform_TimestampTransform interface {
 type TimestampTransform_Delay_ struct {
 	Delay *TimestampTransform_Delay `protobuf:"bytes,1,opt,name=delay,proto3,oneof"`
 }
-
 type TimestampTransform_AlignTo_ struct {
 	AlignTo *TimestampTransform_AlignTo `protobuf:"bytes,2,opt,name=align_to,json=alignTo,proto3,oneof"`
 }
 
-func (*TimestampTransform_Delay_) isTimestampTransform_TimestampTransform() {}
-
+func (*TimestampTransform_Delay_) isTimestampTransform_TimestampTransform()   {}
 func (*TimestampTransform_AlignTo_) isTimestampTransform_TimestampTransform() {}
 
 func (m *TimestampTransform) GetTimestampTransform() isTimestampTransform_TimestampTransform {
@@ -4835,17 +4167,16 @@ func (m *TimestampTransform_Delay) Reset()         { *m = TimestampTransform_Del
 func (m *TimestampTransform_Delay) String() string { return proto.CompactTextString(m) }
 func (*TimestampTransform_Delay) ProtoMessage()    {}
 func (*TimestampTransform_Delay) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{34, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{33, 0}
 }
-
 func (m *TimestampTransform_Delay) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_TimestampTransform_Delay.Unmarshal(m, b)
 }
 func (m *TimestampTransform_Delay) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_TimestampTransform_Delay.Marshal(b, m, deterministic)
 }
-func (m *TimestampTransform_Delay) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TimestampTransform_Delay.Merge(m, src)
+func (dst *TimestampTransform_Delay) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TimestampTransform_Delay.Merge(dst, src)
 }
 func (m *TimestampTransform_Delay) XXX_Size() int {
 	return xxx_messageInfo_TimestampTransform_Delay.Size(m)
@@ -4879,17 +4210,16 @@ func (m *TimestampTransform_AlignTo) Reset()         { *m = TimestampTransform_A
 func (m *TimestampTransform_AlignTo) String() string { return proto.CompactTextString(m) }
 func (*TimestampTransform_AlignTo) ProtoMessage()    {}
 func (*TimestampTransform_AlignTo) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{34, 1}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{33, 1}
 }
-
 func (m *TimestampTransform_AlignTo) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_TimestampTransform_AlignTo.Unmarshal(m, b)
 }
 func (m *TimestampTransform_AlignTo) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_TimestampTransform_AlignTo.Marshal(b, m, deterministic)
 }
-func (m *TimestampTransform_AlignTo) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_TimestampTransform_AlignTo.Merge(m, src)
+func (dst *TimestampTransform_AlignTo) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TimestampTransform_AlignTo.Merge(dst, src)
 }
 func (m *TimestampTransform_AlignTo) XXX_Size() int {
 	return xxx_messageInfo_TimestampTransform_AlignTo.Size(m)
@@ -4923,7 +4253,7 @@ type SideInput struct {
 	// interface for accessing a side input.
 	//
 	// The only access pattern intended for Beam, because of its superior
-	// performance possibilities, is "urn:beam:sideinput:multimap" (or some such
+	// performance possibilities, is "beam:sideinput:multimap" (or some such
 	// URN)
 	AccessPattern *FunctionSpec `protobuf:"bytes,1,opt,name=access_pattern,json=accessPattern,proto3" json:"access_pattern,omitempty"`
 	// (Required) The SdkFunctionSpec of the UDF that adapts a particular
@@ -4948,17 +4278,16 @@ func (m *SideInput) Reset()         { *m = SideInput{} }
 func (m *SideInput) String() string { return proto.CompactTextString(m) }
 func (*SideInput) ProtoMessage()    {}
 func (*SideInput) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{35}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{34}
 }
-
 func (m *SideInput) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SideInput.Unmarshal(m, b)
 }
 func (m *SideInput) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_SideInput.Marshal(b, m, deterministic)
 }
-func (m *SideInput) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SideInput.Merge(m, src)
+func (dst *SideInput) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SideInput.Merge(dst, src)
 }
 func (m *SideInput) XXX_Size() int {
 	return xxx_messageInfo_SideInput.Size(m)
@@ -4993,8 +4322,6 @@ func (m *SideInput) GetWindowMappingFn() *SdkFunctionSpec {
 // An environment for executing UDFs. By default, an SDK container URL, but
 // can also be a process forked by a command, or an externally managed process.
 type Environment struct {
-	// Deprecated. Tracked in BEAM-5433
-	Url string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
 	// (Required) The URN of the payload
 	Urn string `protobuf:"bytes,2,opt,name=urn,proto3" json:"urn,omitempty"`
 	// (Optional) The data specifying any parameters to the URN. If
@@ -5009,17 +4336,16 @@ func (m *Environment) Reset()         { *m = Environment{} }
 func (m *Environment) String() string { return proto.CompactTextString(m) }
 func (*Environment) ProtoMessage()    {}
 func (*Environment) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{36}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{35}
 }
-
 func (m *Environment) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_Environment.Unmarshal(m, b)
 }
 func (m *Environment) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_Environment.Marshal(b, m, deterministic)
 }
-func (m *Environment) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Environment.Merge(m, src)
+func (dst *Environment) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Environment.Merge(dst, src)
 }
 func (m *Environment) XXX_Size() int {
 	return xxx_messageInfo_Environment.Size(m)
@@ -5029,13 +4355,6 @@ func (m *Environment) XXX_DiscardUnknown() {
 }
 
 var xxx_messageInfo_Environment proto.InternalMessageInfo
-
-func (m *Environment) GetUrl() string {
-	if m != nil {
-		return m.Url
-	}
-	return ""
-}
 
 func (m *Environment) GetUrn() string {
 	if m != nil {
@@ -5061,17 +4380,16 @@ func (m *StandardEnvironments) Reset()         { *m = StandardEnvironments{} }
 func (m *StandardEnvironments) String() string { return proto.CompactTextString(m) }
 func (*StandardEnvironments) ProtoMessage()    {}
 func (*StandardEnvironments) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{37}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{36}
 }
-
 func (m *StandardEnvironments) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_StandardEnvironments.Unmarshal(m, b)
 }
 func (m *StandardEnvironments) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_StandardEnvironments.Marshal(b, m, deterministic)
 }
-func (m *StandardEnvironments) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_StandardEnvironments.Merge(m, src)
+func (dst *StandardEnvironments) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_StandardEnvironments.Merge(dst, src)
 }
 func (m *StandardEnvironments) XXX_Size() int {
 	return xxx_messageInfo_StandardEnvironments.Size(m)
@@ -5094,17 +4412,16 @@ func (m *DockerPayload) Reset()         { *m = DockerPayload{} }
 func (m *DockerPayload) String() string { return proto.CompactTextString(m) }
 func (*DockerPayload) ProtoMessage()    {}
 func (*DockerPayload) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{38}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{37}
 }
-
 func (m *DockerPayload) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_DockerPayload.Unmarshal(m, b)
 }
 func (m *DockerPayload) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_DockerPayload.Marshal(b, m, deterministic)
 }
-func (m *DockerPayload) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_DockerPayload.Merge(m, src)
+func (dst *DockerPayload) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DockerPayload.Merge(dst, src)
 }
 func (m *DockerPayload) XXX_Size() int {
 	return xxx_messageInfo_DockerPayload.Size(m)
@@ -5136,17 +4453,16 @@ func (m *ProcessPayload) Reset()         { *m = ProcessPayload{} }
 func (m *ProcessPayload) String() string { return proto.CompactTextString(m) }
 func (*ProcessPayload) ProtoMessage()    {}
 func (*ProcessPayload) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{39}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{38}
 }
-
 func (m *ProcessPayload) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_ProcessPayload.Unmarshal(m, b)
 }
 func (m *ProcessPayload) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_ProcessPayload.Marshal(b, m, deterministic)
 }
-func (m *ProcessPayload) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ProcessPayload.Merge(m, src)
+func (dst *ProcessPayload) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ProcessPayload.Merge(dst, src)
 }
 func (m *ProcessPayload) XXX_Size() int {
 	return xxx_messageInfo_ProcessPayload.Size(m)
@@ -5185,6 +4501,52 @@ func (m *ProcessPayload) GetEnv() map[string]string {
 	return nil
 }
 
+type ExternalPayload struct {
+	Endpoint             *ApiServiceDescriptor `protobuf:"bytes,1,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
+	Params               map[string]string     `protobuf:"bytes,2,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}              `json:"-"`
+	XXX_unrecognized     []byte                `json:"-"`
+	XXX_sizecache        int32                 `json:"-"`
+}
+
+func (m *ExternalPayload) Reset()         { *m = ExternalPayload{} }
+func (m *ExternalPayload) String() string { return proto.CompactTextString(m) }
+func (*ExternalPayload) ProtoMessage()    {}
+func (*ExternalPayload) Descriptor() ([]byte, []int) {
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{39}
+}
+func (m *ExternalPayload) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ExternalPayload.Unmarshal(m, b)
+}
+func (m *ExternalPayload) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ExternalPayload.Marshal(b, m, deterministic)
+}
+func (dst *ExternalPayload) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ExternalPayload.Merge(dst, src)
+}
+func (m *ExternalPayload) XXX_Size() int {
+	return xxx_messageInfo_ExternalPayload.Size(m)
+}
+func (m *ExternalPayload) XXX_DiscardUnknown() {
+	xxx_messageInfo_ExternalPayload.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ExternalPayload proto.InternalMessageInfo
+
+func (m *ExternalPayload) GetEndpoint() *ApiServiceDescriptor {
+	if m != nil {
+		return m.Endpoint
+	}
+	return nil
+}
+
+func (m *ExternalPayload) GetParams() map[string]string {
+	if m != nil {
+		return m.Params
+	}
+	return nil
+}
+
 // A specification of a user defined function.
 //
 type SdkFunctionSpec struct {
@@ -5202,17 +4564,16 @@ func (m *SdkFunctionSpec) Reset()         { *m = SdkFunctionSpec{} }
 func (m *SdkFunctionSpec) String() string { return proto.CompactTextString(m) }
 func (*SdkFunctionSpec) ProtoMessage()    {}
 func (*SdkFunctionSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{40}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{40}
 }
-
 func (m *SdkFunctionSpec) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_SdkFunctionSpec.Unmarshal(m, b)
 }
 func (m *SdkFunctionSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_SdkFunctionSpec.Marshal(b, m, deterministic)
 }
-func (m *SdkFunctionSpec) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_SdkFunctionSpec.Merge(m, src)
+func (dst *SdkFunctionSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SdkFunctionSpec.Merge(dst, src)
 }
 func (m *SdkFunctionSpec) XXX_Size() int {
 	return xxx_messageInfo_SdkFunctionSpec.Size(m)
@@ -5253,12 +4614,12 @@ func (m *SdkFunctionSpec) GetEnvironmentId() string {
 // one should bear in mind:
 //
 // 1. The runner understands the URN. For example, it might be
-//    a well-known URN like "urn:beam:transform:Top" or
-//    "urn:beam:windowfn:FixedWindows" with
+//    a well-known URN like "beam:transform:Top" or
+//    "beam:windowfn:FixedWindows" with
 //    an agreed-upon payload (e.g. a number or duration,
 //    respectively).
 // 2. The runner does not understand the URN. It might be an
-//    SDK specific URN such as "urn:beam:dofn:javasdk:1.0"
+//    SDK specific URN such as "beam:dofn:javasdk:1.0"
 //    that indicates to the SDK what the payload is,
 //    such as a serialized Java DoFn from a particular
 //    version of the Beam Java SDK. The payload will often
@@ -5282,17 +4643,16 @@ func (m *FunctionSpec) Reset()         { *m = FunctionSpec{} }
 func (m *FunctionSpec) String() string { return proto.CompactTextString(m) }
 func (*FunctionSpec) ProtoMessage()    {}
 func (*FunctionSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{41}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{41}
 }
-
 func (m *FunctionSpec) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_FunctionSpec.Unmarshal(m, b)
 }
 func (m *FunctionSpec) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_FunctionSpec.Marshal(b, m, deterministic)
 }
-func (m *FunctionSpec) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_FunctionSpec.Merge(m, src)
+func (dst *FunctionSpec) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_FunctionSpec.Merge(dst, src)
 }
 func (m *FunctionSpec) XXX_Size() int {
 	return xxx_messageInfo_FunctionSpec.Size(m)
@@ -5330,17 +4690,16 @@ func (m *DisplayData) Reset()         { *m = DisplayData{} }
 func (m *DisplayData) String() string { return proto.CompactTextString(m) }
 func (*DisplayData) ProtoMessage()    {}
 func (*DisplayData) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{42}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{42}
 }
-
 func (m *DisplayData) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_DisplayData.Unmarshal(m, b)
 }
 func (m *DisplayData) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_DisplayData.Marshal(b, m, deterministic)
 }
-func (m *DisplayData) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_DisplayData.Merge(m, src)
+func (dst *DisplayData) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DisplayData.Merge(dst, src)
 }
 func (m *DisplayData) XXX_Size() int {
 	return xxx_messageInfo_DisplayData.Size(m)
@@ -5375,17 +4734,16 @@ func (m *DisplayData_Identifier) Reset()         { *m = DisplayData_Identifier{}
 func (m *DisplayData_Identifier) String() string { return proto.CompactTextString(m) }
 func (*DisplayData_Identifier) ProtoMessage()    {}
 func (*DisplayData_Identifier) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{42, 0}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{42, 0}
 }
-
 func (m *DisplayData_Identifier) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_DisplayData_Identifier.Unmarshal(m, b)
 }
 func (m *DisplayData_Identifier) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_DisplayData_Identifier.Marshal(b, m, deterministic)
 }
-func (m *DisplayData_Identifier) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_DisplayData_Identifier.Merge(m, src)
+func (dst *DisplayData_Identifier) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DisplayData_Identifier.Merge(dst, src)
 }
 func (m *DisplayData_Identifier) XXX_Size() int {
 	return xxx_messageInfo_DisplayData_Identifier.Size(m)
@@ -5440,17 +4798,16 @@ func (m *DisplayData_Item) Reset()         { *m = DisplayData_Item{} }
 func (m *DisplayData_Item) String() string { return proto.CompactTextString(m) }
 func (*DisplayData_Item) ProtoMessage()    {}
 func (*DisplayData_Item) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{42, 1}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{42, 1}
 }
-
 func (m *DisplayData_Item) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_DisplayData_Item.Unmarshal(m, b)
 }
 func (m *DisplayData_Item) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_DisplayData_Item.Marshal(b, m, deterministic)
 }
-func (m *DisplayData_Item) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_DisplayData_Item.Merge(m, src)
+func (dst *DisplayData_Item) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DisplayData_Item.Merge(dst, src)
 }
 func (m *DisplayData_Item) XXX_Size() int {
 	return xxx_messageInfo_DisplayData_Item.Size(m)
@@ -5513,17 +4870,16 @@ func (m *DisplayData_Type) Reset()         { *m = DisplayData_Type{} }
 func (m *DisplayData_Type) String() string { return proto.CompactTextString(m) }
 func (*DisplayData_Type) ProtoMessage()    {}
 func (*DisplayData_Type) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cf57597c3a9659a9, []int{42, 2}
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{42, 2}
 }
-
 func (m *DisplayData_Type) XXX_Unmarshal(b []byte) error {
 	return xxx_messageInfo_DisplayData_Type.Unmarshal(m, b)
 }
 func (m *DisplayData_Type) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	return xxx_messageInfo_DisplayData_Type.Marshal(b, m, deterministic)
 }
-func (m *DisplayData_Type) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_DisplayData_Type.Merge(m, src)
+func (dst *DisplayData_Type) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_DisplayData_Type.Merge(dst, src)
 }
 func (m *DisplayData_Type) XXX_Size() int {
 	return xxx_messageInfo_DisplayData_Type.Size(m)
@@ -5534,12 +4890,716 @@ func (m *DisplayData_Type) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_DisplayData_Type proto.InternalMessageInfo
 
+// A disjoint union of all the things that may contain references
+// that require Components to resolve.
+type MessageWithComponents struct {
+	// (Optional) The by-reference components of the root message,
+	// enabling a standalone message.
+	//
+	// If this is absent, it is expected that there are no
+	// references.
+	Components *Components `protobuf:"bytes,1,opt,name=components,proto3" json:"components,omitempty"`
+	// (Required) The root message that may contain pointers
+	// that should be resolved by looking inside components.
+	//
+	// Types that are valid to be assigned to Root:
+	//	*MessageWithComponents_Coder
+	//	*MessageWithComponents_CombinePayload
+	//	*MessageWithComponents_SdkFunctionSpec
+	//	*MessageWithComponents_ParDoPayload
+	//	*MessageWithComponents_Ptransform
+	//	*MessageWithComponents_Pcollection
+	//	*MessageWithComponents_ReadPayload
+	//	*MessageWithComponents_SideInput
+	//	*MessageWithComponents_WindowIntoPayload
+	//	*MessageWithComponents_WindowingStrategy
+	//	*MessageWithComponents_FunctionSpec
+	Root                 isMessageWithComponents_Root `protobuf_oneof:"root"`
+	XXX_NoUnkeyedLiteral struct{}                     `json:"-"`
+	XXX_unrecognized     []byte                       `json:"-"`
+	XXX_sizecache        int32                        `json:"-"`
+}
+
+func (m *MessageWithComponents) Reset()         { *m = MessageWithComponents{} }
+func (m *MessageWithComponents) String() string { return proto.CompactTextString(m) }
+func (*MessageWithComponents) ProtoMessage()    {}
+func (*MessageWithComponents) Descriptor() ([]byte, []int) {
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{43}
+}
+func (m *MessageWithComponents) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_MessageWithComponents.Unmarshal(m, b)
+}
+func (m *MessageWithComponents) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_MessageWithComponents.Marshal(b, m, deterministic)
+}
+func (dst *MessageWithComponents) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MessageWithComponents.Merge(dst, src)
+}
+func (m *MessageWithComponents) XXX_Size() int {
+	return xxx_messageInfo_MessageWithComponents.Size(m)
+}
+func (m *MessageWithComponents) XXX_DiscardUnknown() {
+	xxx_messageInfo_MessageWithComponents.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MessageWithComponents proto.InternalMessageInfo
+
+type isMessageWithComponents_Root interface {
+	isMessageWithComponents_Root()
+}
+
+type MessageWithComponents_Coder struct {
+	Coder *Coder `protobuf:"bytes,2,opt,name=coder,proto3,oneof"`
+}
+type MessageWithComponents_CombinePayload struct {
+	CombinePayload *CombinePayload `protobuf:"bytes,3,opt,name=combine_payload,json=combinePayload,proto3,oneof"`
+}
+type MessageWithComponents_SdkFunctionSpec struct {
+	SdkFunctionSpec *SdkFunctionSpec `protobuf:"bytes,4,opt,name=sdk_function_spec,json=sdkFunctionSpec,proto3,oneof"`
+}
+type MessageWithComponents_ParDoPayload struct {
+	ParDoPayload *ParDoPayload `protobuf:"bytes,6,opt,name=par_do_payload,json=parDoPayload,proto3,oneof"`
+}
+type MessageWithComponents_Ptransform struct {
+	Ptransform *PTransform `protobuf:"bytes,7,opt,name=ptransform,proto3,oneof"`
+}
+type MessageWithComponents_Pcollection struct {
+	Pcollection *PCollection `protobuf:"bytes,8,opt,name=pcollection,proto3,oneof"`
+}
+type MessageWithComponents_ReadPayload struct {
+	ReadPayload *ReadPayload `protobuf:"bytes,9,opt,name=read_payload,json=readPayload,proto3,oneof"`
+}
+type MessageWithComponents_SideInput struct {
+	SideInput *SideInput `protobuf:"bytes,11,opt,name=side_input,json=sideInput,proto3,oneof"`
+}
+type MessageWithComponents_WindowIntoPayload struct {
+	WindowIntoPayload *WindowIntoPayload `protobuf:"bytes,12,opt,name=window_into_payload,json=windowIntoPayload,proto3,oneof"`
+}
+type MessageWithComponents_WindowingStrategy struct {
+	WindowingStrategy *WindowingStrategy `protobuf:"bytes,13,opt,name=windowing_strategy,json=windowingStrategy,proto3,oneof"`
+}
+type MessageWithComponents_FunctionSpec struct {
+	FunctionSpec *FunctionSpec `protobuf:"bytes,14,opt,name=function_spec,json=functionSpec,proto3,oneof"`
+}
+
+func (*MessageWithComponents_Coder) isMessageWithComponents_Root()             {}
+func (*MessageWithComponents_CombinePayload) isMessageWithComponents_Root()    {}
+func (*MessageWithComponents_SdkFunctionSpec) isMessageWithComponents_Root()   {}
+func (*MessageWithComponents_ParDoPayload) isMessageWithComponents_Root()      {}
+func (*MessageWithComponents_Ptransform) isMessageWithComponents_Root()        {}
+func (*MessageWithComponents_Pcollection) isMessageWithComponents_Root()       {}
+func (*MessageWithComponents_ReadPayload) isMessageWithComponents_Root()       {}
+func (*MessageWithComponents_SideInput) isMessageWithComponents_Root()         {}
+func (*MessageWithComponents_WindowIntoPayload) isMessageWithComponents_Root() {}
+func (*MessageWithComponents_WindowingStrategy) isMessageWithComponents_Root() {}
+func (*MessageWithComponents_FunctionSpec) isMessageWithComponents_Root()      {}
+
+func (m *MessageWithComponents) GetRoot() isMessageWithComponents_Root {
+	if m != nil {
+		return m.Root
+	}
+	return nil
+}
+
+func (m *MessageWithComponents) GetComponents() *Components {
+	if m != nil {
+		return m.Components
+	}
+	return nil
+}
+
+func (m *MessageWithComponents) GetCoder() *Coder {
+	if x, ok := m.GetRoot().(*MessageWithComponents_Coder); ok {
+		return x.Coder
+	}
+	return nil
+}
+
+func (m *MessageWithComponents) GetCombinePayload() *CombinePayload {
+	if x, ok := m.GetRoot().(*MessageWithComponents_CombinePayload); ok {
+		return x.CombinePayload
+	}
+	return nil
+}
+
+func (m *MessageWithComponents) GetSdkFunctionSpec() *SdkFunctionSpec {
+	if x, ok := m.GetRoot().(*MessageWithComponents_SdkFunctionSpec); ok {
+		return x.SdkFunctionSpec
+	}
+	return nil
+}
+
+func (m *MessageWithComponents) GetParDoPayload() *ParDoPayload {
+	if x, ok := m.GetRoot().(*MessageWithComponents_ParDoPayload); ok {
+		return x.ParDoPayload
+	}
+	return nil
+}
+
+func (m *MessageWithComponents) GetPtransform() *PTransform {
+	if x, ok := m.GetRoot().(*MessageWithComponents_Ptransform); ok {
+		return x.Ptransform
+	}
+	return nil
+}
+
+func (m *MessageWithComponents) GetPcollection() *PCollection {
+	if x, ok := m.GetRoot().(*MessageWithComponents_Pcollection); ok {
+		return x.Pcollection
+	}
+	return nil
+}
+
+func (m *MessageWithComponents) GetReadPayload() *ReadPayload {
+	if x, ok := m.GetRoot().(*MessageWithComponents_ReadPayload); ok {
+		return x.ReadPayload
+	}
+	return nil
+}
+
+func (m *MessageWithComponents) GetSideInput() *SideInput {
+	if x, ok := m.GetRoot().(*MessageWithComponents_SideInput); ok {
+		return x.SideInput
+	}
+	return nil
+}
+
+func (m *MessageWithComponents) GetWindowIntoPayload() *WindowIntoPayload {
+	if x, ok := m.GetRoot().(*MessageWithComponents_WindowIntoPayload); ok {
+		return x.WindowIntoPayload
+	}
+	return nil
+}
+
+func (m *MessageWithComponents) GetWindowingStrategy() *WindowingStrategy {
+	if x, ok := m.GetRoot().(*MessageWithComponents_WindowingStrategy); ok {
+		return x.WindowingStrategy
+	}
+	return nil
+}
+
+func (m *MessageWithComponents) GetFunctionSpec() *FunctionSpec {
+	if x, ok := m.GetRoot().(*MessageWithComponents_FunctionSpec); ok {
+		return x.FunctionSpec
+	}
+	return nil
+}
+
+// XXX_OneofFuncs is for the internal use of the proto package.
+func (*MessageWithComponents) XXX_OneofFuncs() (func(msg proto.Message, b *proto.Buffer) error, func(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error), func(msg proto.Message) (n int), []interface{}) {
+	return _MessageWithComponents_OneofMarshaler, _MessageWithComponents_OneofUnmarshaler, _MessageWithComponents_OneofSizer, []interface{}{
+		(*MessageWithComponents_Coder)(nil),
+		(*MessageWithComponents_CombinePayload)(nil),
+		(*MessageWithComponents_SdkFunctionSpec)(nil),
+		(*MessageWithComponents_ParDoPayload)(nil),
+		(*MessageWithComponents_Ptransform)(nil),
+		(*MessageWithComponents_Pcollection)(nil),
+		(*MessageWithComponents_ReadPayload)(nil),
+		(*MessageWithComponents_SideInput)(nil),
+		(*MessageWithComponents_WindowIntoPayload)(nil),
+		(*MessageWithComponents_WindowingStrategy)(nil),
+		(*MessageWithComponents_FunctionSpec)(nil),
+	}
+}
+
+func _MessageWithComponents_OneofMarshaler(msg proto.Message, b *proto.Buffer) error {
+	m := msg.(*MessageWithComponents)
+	// root
+	switch x := m.Root.(type) {
+	case *MessageWithComponents_Coder:
+		b.EncodeVarint(2<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Coder); err != nil {
+			return err
+		}
+	case *MessageWithComponents_CombinePayload:
+		b.EncodeVarint(3<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.CombinePayload); err != nil {
+			return err
+		}
+	case *MessageWithComponents_SdkFunctionSpec:
+		b.EncodeVarint(4<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.SdkFunctionSpec); err != nil {
+			return err
+		}
+	case *MessageWithComponents_ParDoPayload:
+		b.EncodeVarint(6<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.ParDoPayload); err != nil {
+			return err
+		}
+	case *MessageWithComponents_Ptransform:
+		b.EncodeVarint(7<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Ptransform); err != nil {
+			return err
+		}
+	case *MessageWithComponents_Pcollection:
+		b.EncodeVarint(8<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.Pcollection); err != nil {
+			return err
+		}
+	case *MessageWithComponents_ReadPayload:
+		b.EncodeVarint(9<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.ReadPayload); err != nil {
+			return err
+		}
+	case *MessageWithComponents_SideInput:
+		b.EncodeVarint(11<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.SideInput); err != nil {
+			return err
+		}
+	case *MessageWithComponents_WindowIntoPayload:
+		b.EncodeVarint(12<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.WindowIntoPayload); err != nil {
+			return err
+		}
+	case *MessageWithComponents_WindowingStrategy:
+		b.EncodeVarint(13<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.WindowingStrategy); err != nil {
+			return err
+		}
+	case *MessageWithComponents_FunctionSpec:
+		b.EncodeVarint(14<<3 | proto.WireBytes)
+		if err := b.EncodeMessage(x.FunctionSpec); err != nil {
+			return err
+		}
+	case nil:
+	default:
+		return fmt.Errorf("MessageWithComponents.Root has unexpected type %T", x)
+	}
+	return nil
+}
+
+func _MessageWithComponents_OneofUnmarshaler(msg proto.Message, tag, wire int, b *proto.Buffer) (bool, error) {
+	m := msg.(*MessageWithComponents)
+	switch tag {
+	case 2: // root.coder
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(Coder)
+		err := b.DecodeMessage(msg)
+		m.Root = &MessageWithComponents_Coder{msg}
+		return true, err
+	case 3: // root.combine_payload
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(CombinePayload)
+		err := b.DecodeMessage(msg)
+		m.Root = &MessageWithComponents_CombinePayload{msg}
+		return true, err
+	case 4: // root.sdk_function_spec
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(SdkFunctionSpec)
+		err := b.DecodeMessage(msg)
+		m.Root = &MessageWithComponents_SdkFunctionSpec{msg}
+		return true, err
+	case 6: // root.par_do_payload
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(ParDoPayload)
+		err := b.DecodeMessage(msg)
+		m.Root = &MessageWithComponents_ParDoPayload{msg}
+		return true, err
+	case 7: // root.ptransform
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(PTransform)
+		err := b.DecodeMessage(msg)
+		m.Root = &MessageWithComponents_Ptransform{msg}
+		return true, err
+	case 8: // root.pcollection
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(PCollection)
+		err := b.DecodeMessage(msg)
+		m.Root = &MessageWithComponents_Pcollection{msg}
+		return true, err
+	case 9: // root.read_payload
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(ReadPayload)
+		err := b.DecodeMessage(msg)
+		m.Root = &MessageWithComponents_ReadPayload{msg}
+		return true, err
+	case 11: // root.side_input
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(SideInput)
+		err := b.DecodeMessage(msg)
+		m.Root = &MessageWithComponents_SideInput{msg}
+		return true, err
+	case 12: // root.window_into_payload
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(WindowIntoPayload)
+		err := b.DecodeMessage(msg)
+		m.Root = &MessageWithComponents_WindowIntoPayload{msg}
+		return true, err
+	case 13: // root.windowing_strategy
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(WindowingStrategy)
+		err := b.DecodeMessage(msg)
+		m.Root = &MessageWithComponents_WindowingStrategy{msg}
+		return true, err
+	case 14: // root.function_spec
+		if wire != proto.WireBytes {
+			return true, proto.ErrInternalBadWireType
+		}
+		msg := new(FunctionSpec)
+		err := b.DecodeMessage(msg)
+		m.Root = &MessageWithComponents_FunctionSpec{msg}
+		return true, err
+	default:
+		return false, nil
+	}
+}
+
+func _MessageWithComponents_OneofSizer(msg proto.Message) (n int) {
+	m := msg.(*MessageWithComponents)
+	// root
+	switch x := m.Root.(type) {
+	case *MessageWithComponents_Coder:
+		s := proto.Size(x.Coder)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *MessageWithComponents_CombinePayload:
+		s := proto.Size(x.CombinePayload)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *MessageWithComponents_SdkFunctionSpec:
+		s := proto.Size(x.SdkFunctionSpec)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *MessageWithComponents_ParDoPayload:
+		s := proto.Size(x.ParDoPayload)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *MessageWithComponents_Ptransform:
+		s := proto.Size(x.Ptransform)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *MessageWithComponents_Pcollection:
+		s := proto.Size(x.Pcollection)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *MessageWithComponents_ReadPayload:
+		s := proto.Size(x.ReadPayload)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *MessageWithComponents_SideInput:
+		s := proto.Size(x.SideInput)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *MessageWithComponents_WindowIntoPayload:
+		s := proto.Size(x.WindowIntoPayload)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *MessageWithComponents_WindowingStrategy:
+		s := proto.Size(x.WindowingStrategy)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case *MessageWithComponents_FunctionSpec:
+		s := proto.Size(x.FunctionSpec)
+		n += 1 // tag and wire
+		n += proto.SizeVarint(uint64(s))
+		n += s
+	case nil:
+	default:
+		panic(fmt.Sprintf("proto: unexpected type %T in oneof", x))
+	}
+	return n
+}
+
+// The payload for an executable stage. This will eventually be passed to an SDK in the form of a
+// ProcessBundleDescriptor.
+type ExecutableStagePayload struct {
+	// (Required) Environment in which this stage executes.
+	//
+	// We use an environment rather than environment id
+	// because ExecutableStages use environments directly. This may change in the future.
+	Environment *Environment `protobuf:"bytes,1,opt,name=environment,proto3" json:"environment,omitempty"`
+	// (Required) Input PCollection id. This must be present as a value in the inputs of any
+	// PTransform the ExecutableStagePayload is the payload of.
+	Input string `protobuf:"bytes,2,opt,name=input,proto3" json:"input,omitempty"`
+	// The side inputs required for this executable stage. Each side input of each PTransform within
+	// this ExecutableStagePayload must be represented within this field.
+	SideInputs []*ExecutableStagePayload_SideInputId `protobuf:"bytes,3,rep,name=side_inputs,json=sideInputs,proto3" json:"side_inputs,omitempty"`
+	// PTransform ids contained within this executable stage. This must contain at least one
+	// PTransform id.
+	Transforms []string `protobuf:"bytes,4,rep,name=transforms,proto3" json:"transforms,omitempty"`
+	// Output PCollection ids. This must be equal to the values of the outputs of any
+	// PTransform the ExecutableStagePayload is the payload of.
+	Outputs []string `protobuf:"bytes,5,rep,name=outputs,proto3" json:"outputs,omitempty"`
+	// (Required) The components for the Executable Stage. This must contain all of the Transforms
+	// in transforms, and the closure of all of the components they recognize.
+	Components *Components `protobuf:"bytes,6,opt,name=components,proto3" json:"components,omitempty"`
+	// The user states required for this executable stage. Each user state of each PTransform within
+	// this ExecutableStagePayload must be represented within this field.
+	UserStates []*ExecutableStagePayload_UserStateId `protobuf:"bytes,7,rep,name=user_states,json=userStates,proto3" json:"user_states,omitempty"`
+	// The timers required for this executable stage. Each timer of each PTransform within
+	// this ExecutableStagePayload must be represented within this field.
+	Timers               []*ExecutableStagePayload_TimerId `protobuf:"bytes,8,rep,name=timers,proto3" json:"timers,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                          `json:"-"`
+	XXX_unrecognized     []byte                            `json:"-"`
+	XXX_sizecache        int32                             `json:"-"`
+}
+
+func (m *ExecutableStagePayload) Reset()         { *m = ExecutableStagePayload{} }
+func (m *ExecutableStagePayload) String() string { return proto.CompactTextString(m) }
+func (*ExecutableStagePayload) ProtoMessage()    {}
+func (*ExecutableStagePayload) Descriptor() ([]byte, []int) {
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{44}
+}
+func (m *ExecutableStagePayload) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ExecutableStagePayload.Unmarshal(m, b)
+}
+func (m *ExecutableStagePayload) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ExecutableStagePayload.Marshal(b, m, deterministic)
+}
+func (dst *ExecutableStagePayload) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ExecutableStagePayload.Merge(dst, src)
+}
+func (m *ExecutableStagePayload) XXX_Size() int {
+	return xxx_messageInfo_ExecutableStagePayload.Size(m)
+}
+func (m *ExecutableStagePayload) XXX_DiscardUnknown() {
+	xxx_messageInfo_ExecutableStagePayload.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ExecutableStagePayload proto.InternalMessageInfo
+
+func (m *ExecutableStagePayload) GetEnvironment() *Environment {
+	if m != nil {
+		return m.Environment
+	}
+	return nil
+}
+
+func (m *ExecutableStagePayload) GetInput() string {
+	if m != nil {
+		return m.Input
+	}
+	return ""
+}
+
+func (m *ExecutableStagePayload) GetSideInputs() []*ExecutableStagePayload_SideInputId {
+	if m != nil {
+		return m.SideInputs
+	}
+	return nil
+}
+
+func (m *ExecutableStagePayload) GetTransforms() []string {
+	if m != nil {
+		return m.Transforms
+	}
+	return nil
+}
+
+func (m *ExecutableStagePayload) GetOutputs() []string {
+	if m != nil {
+		return m.Outputs
+	}
+	return nil
+}
+
+func (m *ExecutableStagePayload) GetComponents() *Components {
+	if m != nil {
+		return m.Components
+	}
+	return nil
+}
+
+func (m *ExecutableStagePayload) GetUserStates() []*ExecutableStagePayload_UserStateId {
+	if m != nil {
+		return m.UserStates
+	}
+	return nil
+}
+
+func (m *ExecutableStagePayload) GetTimers() []*ExecutableStagePayload_TimerId {
+	if m != nil {
+		return m.Timers
+	}
+	return nil
+}
+
+// A reference to a side input. Side inputs are uniquely identified by PTransform id and
+// local name.
+type ExecutableStagePayload_SideInputId struct {
+	// (Required) The id of the PTransform that references this side input.
+	TransformId string `protobuf:"bytes,1,opt,name=transform_id,json=transformId,proto3" json:"transform_id,omitempty"`
+	// (Required) The local name of this side input from the PTransform that references it.
+	LocalName            string   `protobuf:"bytes,2,opt,name=local_name,json=localName,proto3" json:"local_name,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *ExecutableStagePayload_SideInputId) Reset()         { *m = ExecutableStagePayload_SideInputId{} }
+func (m *ExecutableStagePayload_SideInputId) String() string { return proto.CompactTextString(m) }
+func (*ExecutableStagePayload_SideInputId) ProtoMessage()    {}
+func (*ExecutableStagePayload_SideInputId) Descriptor() ([]byte, []int) {
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{44, 0}
+}
+func (m *ExecutableStagePayload_SideInputId) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ExecutableStagePayload_SideInputId.Unmarshal(m, b)
+}
+func (m *ExecutableStagePayload_SideInputId) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ExecutableStagePayload_SideInputId.Marshal(b, m, deterministic)
+}
+func (dst *ExecutableStagePayload_SideInputId) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ExecutableStagePayload_SideInputId.Merge(dst, src)
+}
+func (m *ExecutableStagePayload_SideInputId) XXX_Size() int {
+	return xxx_messageInfo_ExecutableStagePayload_SideInputId.Size(m)
+}
+func (m *ExecutableStagePayload_SideInputId) XXX_DiscardUnknown() {
+	xxx_messageInfo_ExecutableStagePayload_SideInputId.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ExecutableStagePayload_SideInputId proto.InternalMessageInfo
+
+func (m *ExecutableStagePayload_SideInputId) GetTransformId() string {
+	if m != nil {
+		return m.TransformId
+	}
+	return ""
+}
+
+func (m *ExecutableStagePayload_SideInputId) GetLocalName() string {
+	if m != nil {
+		return m.LocalName
+	}
+	return ""
+}
+
+// A reference to user state. User states are uniquely identified by PTransform id and
+// local name.
+type ExecutableStagePayload_UserStateId struct {
+	// (Required) The id of the PTransform that references this user state.
+	TransformId string `protobuf:"bytes,1,opt,name=transform_id,json=transformId,proto3" json:"transform_id,omitempty"`
+	// (Required) The local name of this user state for the PTransform that references it.
+	LocalName            string   `protobuf:"bytes,2,opt,name=local_name,json=localName,proto3" json:"local_name,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *ExecutableStagePayload_UserStateId) Reset()         { *m = ExecutableStagePayload_UserStateId{} }
+func (m *ExecutableStagePayload_UserStateId) String() string { return proto.CompactTextString(m) }
+func (*ExecutableStagePayload_UserStateId) ProtoMessage()    {}
+func (*ExecutableStagePayload_UserStateId) Descriptor() ([]byte, []int) {
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{44, 1}
+}
+func (m *ExecutableStagePayload_UserStateId) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ExecutableStagePayload_UserStateId.Unmarshal(m, b)
+}
+func (m *ExecutableStagePayload_UserStateId) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ExecutableStagePayload_UserStateId.Marshal(b, m, deterministic)
+}
+func (dst *ExecutableStagePayload_UserStateId) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ExecutableStagePayload_UserStateId.Merge(dst, src)
+}
+func (m *ExecutableStagePayload_UserStateId) XXX_Size() int {
+	return xxx_messageInfo_ExecutableStagePayload_UserStateId.Size(m)
+}
+func (m *ExecutableStagePayload_UserStateId) XXX_DiscardUnknown() {
+	xxx_messageInfo_ExecutableStagePayload_UserStateId.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ExecutableStagePayload_UserStateId proto.InternalMessageInfo
+
+func (m *ExecutableStagePayload_UserStateId) GetTransformId() string {
+	if m != nil {
+		return m.TransformId
+	}
+	return ""
+}
+
+func (m *ExecutableStagePayload_UserStateId) GetLocalName() string {
+	if m != nil {
+		return m.LocalName
+	}
+	return ""
+}
+
+// A reference to a timer. Timers are uniquely identified by PTransform id and
+// local name.
+type ExecutableStagePayload_TimerId struct {
+	// (Required) The id of the PTransform that references this timer.
+	TransformId string `protobuf:"bytes,1,opt,name=transform_id,json=transformId,proto3" json:"transform_id,omitempty"`
+	// (Required) The local name of this timer for the PTransform that references it.
+	LocalName            string   `protobuf:"bytes,2,opt,name=local_name,json=localName,proto3" json:"local_name,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *ExecutableStagePayload_TimerId) Reset()         { *m = ExecutableStagePayload_TimerId{} }
+func (m *ExecutableStagePayload_TimerId) String() string { return proto.CompactTextString(m) }
+func (*ExecutableStagePayload_TimerId) ProtoMessage()    {}
+func (*ExecutableStagePayload_TimerId) Descriptor() ([]byte, []int) {
+	return fileDescriptor_beam_runner_api_70c7dbd5f3375954, []int{44, 2}
+}
+func (m *ExecutableStagePayload_TimerId) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_ExecutableStagePayload_TimerId.Unmarshal(m, b)
+}
+func (m *ExecutableStagePayload_TimerId) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_ExecutableStagePayload_TimerId.Marshal(b, m, deterministic)
+}
+func (dst *ExecutableStagePayload_TimerId) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ExecutableStagePayload_TimerId.Merge(dst, src)
+}
+func (m *ExecutableStagePayload_TimerId) XXX_Size() int {
+	return xxx_messageInfo_ExecutableStagePayload_TimerId.Size(m)
+}
+func (m *ExecutableStagePayload_TimerId) XXX_DiscardUnknown() {
+	xxx_messageInfo_ExecutableStagePayload_TimerId.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ExecutableStagePayload_TimerId proto.InternalMessageInfo
+
+func (m *ExecutableStagePayload_TimerId) GetTransformId() string {
+	if m != nil {
+		return m.TransformId
+	}
+	return ""
+}
+
+func (m *ExecutableStagePayload_TimerId) GetLocalName() string {
+	if m != nil {
+		return m.LocalName
+	}
+	return ""
+}
+
 var E_BeamUrn = &proto.ExtensionDesc{
 	ExtendedType:  (*descriptor.EnumValueOptions)(nil),
 	ExtensionType: (*string)(nil),
 	Field:         185324356,
 	Name:          "org.apache.beam.model.pipeline.v1.beam_urn",
-	Tag:           "bytes,185324356,opt,name=beam_urn",
+	Tag:           "bytes,185324356,opt,name=beam_urn,json=beamUrn",
 	Filename:      "beam_runner_api.proto",
 }
 
@@ -5548,29 +5608,11 @@ var E_BeamConstant = &proto.ExtensionDesc{
 	ExtensionType: (*string)(nil),
 	Field:         185324357,
 	Name:          "org.apache.beam.model.pipeline.v1.beam_constant",
-	Tag:           "bytes,185324357,opt,name=beam_constant",
+	Tag:           "bytes,185324357,opt,name=beam_constant,json=beamConstant",
 	Filename:      "beam_runner_api.proto",
 }
 
 func init() {
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.BeamConstants_Constants", BeamConstants_Constants_name, BeamConstants_Constants_value)
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.StandardPTransforms_Primitives", StandardPTransforms_Primitives_name, StandardPTransforms_Primitives_value)
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.StandardPTransforms_DeprecatedPrimitives", StandardPTransforms_DeprecatedPrimitives_name, StandardPTransforms_DeprecatedPrimitives_value)
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.StandardPTransforms_Composites", StandardPTransforms_Composites_name, StandardPTransforms_Composites_value)
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.StandardPTransforms_CombineComponents", StandardPTransforms_CombineComponents_name, StandardPTransforms_CombineComponents_value)
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.StandardPTransforms_SplittableParDoComponents", StandardPTransforms_SplittableParDoComponents_name, StandardPTransforms_SplittableParDoComponents_value)
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.StandardSideInputTypes_Enum", StandardSideInputTypes_Enum_name, StandardSideInputTypes_Enum_value)
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.Parameter_Type_Enum", Parameter_Type_Enum_name, Parameter_Type_Enum_value)
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.IsBounded_Enum", IsBounded_Enum_name, IsBounded_Enum_value)
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.StandardCoders_Enum", StandardCoders_Enum_name, StandardCoders_Enum_value)
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.MergeStatus_Enum", MergeStatus_Enum_name, MergeStatus_Enum_value)
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.AccumulationMode_Enum", AccumulationMode_Enum_name, AccumulationMode_Enum_value)
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.ClosingBehavior_Enum", ClosingBehavior_Enum_name, ClosingBehavior_Enum_value)
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.OnTimeBehavior_Enum", OnTimeBehavior_Enum_name, OnTimeBehavior_Enum_value)
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.OutputTime_Enum", OutputTime_Enum_name, OutputTime_Enum_value)
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.TimeDomain_Enum", TimeDomain_Enum_name, TimeDomain_Enum_value)
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.StandardEnvironments_Environments", StandardEnvironments_Environments_name, StandardEnvironments_Environments_value)
-	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.DisplayData_Type_Enum", DisplayData_Type_Enum_name, DisplayData_Type_Enum_value)
 	proto.RegisterType((*BeamConstants)(nil), "org.apache.beam.model.pipeline.v1.BeamConstants")
 	proto.RegisterType((*Components)(nil), "org.apache.beam.model.pipeline.v1.Components")
 	proto.RegisterMapType((map[string]*Coder)(nil), "org.apache.beam.model.pipeline.v1.Components.CodersEntry")
@@ -5578,7 +5620,6 @@ func init() {
 	proto.RegisterMapType((map[string]*PCollection)(nil), "org.apache.beam.model.pipeline.v1.Components.PcollectionsEntry")
 	proto.RegisterMapType((map[string]*PTransform)(nil), "org.apache.beam.model.pipeline.v1.Components.TransformsEntry")
 	proto.RegisterMapType((map[string]*WindowingStrategy)(nil), "org.apache.beam.model.pipeline.v1.Components.WindowingStrategiesEntry")
-	proto.RegisterType((*MessageWithComponents)(nil), "org.apache.beam.model.pipeline.v1.MessageWithComponents")
 	proto.RegisterType((*Pipeline)(nil), "org.apache.beam.model.pipeline.v1.Pipeline")
 	proto.RegisterType((*PTransform)(nil), "org.apache.beam.model.pipeline.v1.PTransform")
 	proto.RegisterMapType((map[string]string)(nil), "org.apache.beam.model.pipeline.v1.PTransform.InputsEntry")
@@ -5586,10 +5627,6 @@ func init() {
 	proto.RegisterType((*StandardPTransforms)(nil), "org.apache.beam.model.pipeline.v1.StandardPTransforms")
 	proto.RegisterType((*StandardSideInputTypes)(nil), "org.apache.beam.model.pipeline.v1.StandardSideInputTypes")
 	proto.RegisterType((*PCollection)(nil), "org.apache.beam.model.pipeline.v1.PCollection")
-	proto.RegisterType((*ExecutableStagePayload)(nil), "org.apache.beam.model.pipeline.v1.ExecutableStagePayload")
-	proto.RegisterType((*ExecutableStagePayload_SideInputId)(nil), "org.apache.beam.model.pipeline.v1.ExecutableStagePayload.SideInputId")
-	proto.RegisterType((*ExecutableStagePayload_UserStateId)(nil), "org.apache.beam.model.pipeline.v1.ExecutableStagePayload.UserStateId")
-	proto.RegisterType((*ExecutableStagePayload_TimerId)(nil), "org.apache.beam.model.pipeline.v1.ExecutableStagePayload.TimerId")
 	proto.RegisterType((*ParDoPayload)(nil), "org.apache.beam.model.pipeline.v1.ParDoPayload")
 	proto.RegisterMapType((map[string]*SideInput)(nil), "org.apache.beam.model.pipeline.v1.ParDoPayload.SideInputsEntry")
 	proto.RegisterMapType((map[string]*StateSpec)(nil), "org.apache.beam.model.pipeline.v1.ParDoPayload.StateSpecsEntry")
@@ -5597,7 +5634,7 @@ func init() {
 	proto.RegisterType((*Parameter)(nil), "org.apache.beam.model.pipeline.v1.Parameter")
 	proto.RegisterType((*Parameter_Type)(nil), "org.apache.beam.model.pipeline.v1.Parameter.Type")
 	proto.RegisterType((*StateSpec)(nil), "org.apache.beam.model.pipeline.v1.StateSpec")
-	proto.RegisterType((*ValueStateSpec)(nil), "org.apache.beam.model.pipeline.v1.ValueStateSpec")
+	proto.RegisterType((*ReadModifyWriteStateSpec)(nil), "org.apache.beam.model.pipeline.v1.ReadModifyWriteStateSpec")
 	proto.RegisterType((*BagStateSpec)(nil), "org.apache.beam.model.pipeline.v1.BagStateSpec")
 	proto.RegisterType((*CombiningStateSpec)(nil), "org.apache.beam.model.pipeline.v1.CombiningStateSpec")
 	proto.RegisterType((*MapStateSpec)(nil), "org.apache.beam.model.pipeline.v1.MapStateSpec")
@@ -5613,6 +5650,7 @@ func init() {
 	proto.RegisterType((*TestStreamPayload_Event_AdvanceProcessingTime)(nil), "org.apache.beam.model.pipeline.v1.TestStreamPayload.Event.AdvanceProcessingTime")
 	proto.RegisterType((*TestStreamPayload_Event_AddElements)(nil), "org.apache.beam.model.pipeline.v1.TestStreamPayload.Event.AddElements")
 	proto.RegisterType((*TestStreamPayload_TimestampedElement)(nil), "org.apache.beam.model.pipeline.v1.TestStreamPayload.TimestampedElement")
+	proto.RegisterType((*EventsRequest)(nil), "org.apache.beam.model.pipeline.v1.EventsRequest")
 	proto.RegisterType((*WriteFilesPayload)(nil), "org.apache.beam.model.pipeline.v1.WriteFilesPayload")
 	proto.RegisterMapType((map[string]*SideInput)(nil), "org.apache.beam.model.pipeline.v1.WriteFilesPayload.SideInputsEntry")
 	proto.RegisterType((*Coder)(nil), "org.apache.beam.model.pipeline.v1.Coder")
@@ -5646,325 +5684,472 @@ func init() {
 	proto.RegisterType((*DockerPayload)(nil), "org.apache.beam.model.pipeline.v1.DockerPayload")
 	proto.RegisterType((*ProcessPayload)(nil), "org.apache.beam.model.pipeline.v1.ProcessPayload")
 	proto.RegisterMapType((map[string]string)(nil), "org.apache.beam.model.pipeline.v1.ProcessPayload.EnvEntry")
+	proto.RegisterType((*ExternalPayload)(nil), "org.apache.beam.model.pipeline.v1.ExternalPayload")
+	proto.RegisterMapType((map[string]string)(nil), "org.apache.beam.model.pipeline.v1.ExternalPayload.ParamsEntry")
 	proto.RegisterType((*SdkFunctionSpec)(nil), "org.apache.beam.model.pipeline.v1.SdkFunctionSpec")
 	proto.RegisterType((*FunctionSpec)(nil), "org.apache.beam.model.pipeline.v1.FunctionSpec")
 	proto.RegisterType((*DisplayData)(nil), "org.apache.beam.model.pipeline.v1.DisplayData")
 	proto.RegisterType((*DisplayData_Identifier)(nil), "org.apache.beam.model.pipeline.v1.DisplayData.Identifier")
 	proto.RegisterType((*DisplayData_Item)(nil), "org.apache.beam.model.pipeline.v1.DisplayData.Item")
 	proto.RegisterType((*DisplayData_Type)(nil), "org.apache.beam.model.pipeline.v1.DisplayData.Type")
+	proto.RegisterType((*MessageWithComponents)(nil), "org.apache.beam.model.pipeline.v1.MessageWithComponents")
+	proto.RegisterType((*ExecutableStagePayload)(nil), "org.apache.beam.model.pipeline.v1.ExecutableStagePayload")
+	proto.RegisterType((*ExecutableStagePayload_SideInputId)(nil), "org.apache.beam.model.pipeline.v1.ExecutableStagePayload.SideInputId")
+	proto.RegisterType((*ExecutableStagePayload_UserStateId)(nil), "org.apache.beam.model.pipeline.v1.ExecutableStagePayload.UserStateId")
+	proto.RegisterType((*ExecutableStagePayload_TimerId)(nil), "org.apache.beam.model.pipeline.v1.ExecutableStagePayload.TimerId")
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.BeamConstants_Constants", BeamConstants_Constants_name, BeamConstants_Constants_value)
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.StandardPTransforms_Primitives", StandardPTransforms_Primitives_name, StandardPTransforms_Primitives_value)
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.StandardPTransforms_DeprecatedPrimitives", StandardPTransforms_DeprecatedPrimitives_name, StandardPTransforms_DeprecatedPrimitives_value)
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.StandardPTransforms_Composites", StandardPTransforms_Composites_name, StandardPTransforms_Composites_value)
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.StandardPTransforms_CombineComponents", StandardPTransforms_CombineComponents_name, StandardPTransforms_CombineComponents_value)
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.StandardPTransforms_SplittableParDoComponents", StandardPTransforms_SplittableParDoComponents_name, StandardPTransforms_SplittableParDoComponents_value)
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.StandardSideInputTypes_Enum", StandardSideInputTypes_Enum_name, StandardSideInputTypes_Enum_value)
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.Parameter_Type_Enum", Parameter_Type_Enum_name, Parameter_Type_Enum_value)
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.IsBounded_Enum", IsBounded_Enum_name, IsBounded_Enum_value)
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.StandardCoders_Enum", StandardCoders_Enum_name, StandardCoders_Enum_value)
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.MergeStatus_Enum", MergeStatus_Enum_name, MergeStatus_Enum_value)
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.AccumulationMode_Enum", AccumulationMode_Enum_name, AccumulationMode_Enum_value)
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.ClosingBehavior_Enum", ClosingBehavior_Enum_name, ClosingBehavior_Enum_value)
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.OnTimeBehavior_Enum", OnTimeBehavior_Enum_name, OnTimeBehavior_Enum_value)
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.OutputTime_Enum", OutputTime_Enum_name, OutputTime_Enum_value)
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.TimeDomain_Enum", TimeDomain_Enum_name, TimeDomain_Enum_value)
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.StandardEnvironments_Environments", StandardEnvironments_Environments_name, StandardEnvironments_Environments_value)
+	proto.RegisterEnum("org.apache.beam.model.pipeline.v1.DisplayData_Type_Enum", DisplayData_Type_Enum_name, DisplayData_Type_Enum_value)
 	proto.RegisterExtension(E_BeamUrn)
 	proto.RegisterExtension(E_BeamConstant)
 }
 
-func init() { proto.RegisterFile("beam_runner_api.proto", fileDescriptor_cf57597c3a9659a9) }
+// Reference imports to suppress errors if they are not otherwise used.
+var _ context.Context
+var _ grpc.ClientConn
 
-var fileDescriptor_cf57597c3a9659a9 = []byte{
-	// 4910 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x5b, 0xcd, 0x73, 0xdb, 0xda,
-	0x75, 0xe7, 0x87, 0xf8, 0x75, 0x48, 0x51, 0xd0, 0xb5, 0xec, 0xc8, 0xe8, 0x4b, 0x6c, 0xe3, 0x39,
-	0x7e, 0xce, 0x8b, 0x1f, 0x6d, 0xc9, 0xf6, 0xb3, 0xad, 0x24, 0x4e, 0x28, 0x11, 0xb4, 0x60, 0xf3,
-	0x2b, 0x20, 0x25, 0xdb, 0x2f, 0xe9, 0x43, 0x20, 0xe2, 0x52, 0xc2, 0x08, 0x04, 0x18, 0x00, 0x94,
-	0x1f, 0x33, 0xcd, 0x64, 0xa6, 0x8b, 0x37, 0x9d, 0xe9, 0xa6, 0x5d, 0x74, 0xf1, 0x56, 0x9d, 0x49,
-	0x3a, 0x5d, 0xb4, 0x8b, 0x7e, 0xa4, 0xd3, 0x4e, 0xb7, 0x49, 0xbb, 0xef, 0x4c, 0xba, 0xea, 0x7f,
-	0xd1, 0x76, 0xba, 0xe9, 0xaa, 0x73, 0x3f, 0x00, 0x82, 0xa4, 0x64, 0x93, 0x92, 0xa7, 0x3b, 0xe2,
-	0xf0, 0x9e, 0xdf, 0x39, 0x38, 0xf7, 0xdc, 0x73, 0xcf, 0x39, 0xf7, 0x02, 0x2e, 0x1f, 0x60, 0xbd,
-	0xaf, 0xb9, 0x43, 0xdb, 0xc6, 0xae, 0xa6, 0x0f, 0xcc, 0xd2, 0xc0, 0x75, 0x7c, 0x07, 0xdd, 0x70,
-	0xdc, 0xc3, 0x92, 0x3e, 0xd0, 0xbb, 0x47, 0xb8, 0x44, 0x46, 0x94, 0xfa, 0x8e, 0x81, 0xad, 0xd2,
-	0xc0, 0x1c, 0x60, 0xcb, 0xb4, 0x71, 0xe9, 0x64, 0x43, 0xbc, 0x7a, 0xe8, 0x38, 0x87, 0x16, 0xbe,
-	0x4b, 0x19, 0x0e, 0x86, 0xbd, 0xbb, 0xba, 0x3d, 0x62, 0xdc, 0xe2, 0xf5, 0xe9, 0xbf, 0x0c, 0xec,
-	0x75, 0x5d, 0x73, 0xe0, 0x3b, 0x2e, 0x1b, 0x21, 0xfd, 0x26, 0x0e, 0xcb, 0xdb, 0x58, 0xef, 0xef,
-	0x38, 0xb6, 0xe7, 0xeb, 0xb6, 0xef, 0x49, 0x7f, 0x1b, 0x87, 0x5c, 0xf8, 0x84, 0x36, 0x60, 0xad,
-	0xae, 0x34, 0xb4, 0x8e, 0x52, 0x97, 0xdb, 0x9d, 0x72, 0xbd, 0xa5, 0xd5, 0x95, 0x5a, 0x4d, 0x69,
-	0x0b, 0x31, 0xf1, 0x6b, 0x7f, 0xf5, 0x0f, 0xff, 0xfb, 0x9b, 0xd4, 0xea, 0x27, 0x4f, 0x36, 0x37,
-	0xef, 0xdf, 0x7f, 0xb4, 0x79, 0xef, 0xfe, 0xa7, 0x8f, 0x1f, 0x3e, 0x78, 0xf4, 0xe8, 0x21, 0xba,
-	0x07, 0x6b, 0xf5, 0xf2, 0xab, 0x59, 0x96, 0xb8, 0x78, 0x85, 0xb2, 0x08, 0x33, 0x1c, 0x4f, 0x41,
-	0x7a, 0x56, 0x6b, 0x6e, 0x97, 0x6b, 0xda, 0x4b, 0xa5, 0x51, 0x69, 0xbe, 0xd4, 0x4e, 0xe5, 0x4f,
-	0x4c, 0xf2, 0x6f, 0x3c, 0x79, 0x78, 0xef, 0x01, 0xe5, 0x97, 0xfe, 0x31, 0x0b, 0xb0, 0xe3, 0xf4,
-	0x07, 0x8e, 0x8d, 0x89, 0xce, 0xbf, 0x0f, 0xe0, 0xbb, 0xba, 0xed, 0xf5, 0x1c, 0xb7, 0xef, 0xad,
-	0xc7, 0xaf, 0x27, 0x6f, 0xe7, 0x37, 0xbf, 0x57, 0x7a, 0xa7, 0x21, 0x4b, 0x63, 0x88, 0x52, 0x27,
-	0xe4, 0x97, 0x6d, 0xdf, 0x1d, 0xa9, 0x11, 0x40, 0xd4, 0x85, 0xc2, 0xa0, 0xeb, 0x58, 0x16, 0xee,
-	0xfa, 0xa6, 0x63, 0x7b, 0xeb, 0x09, 0x2a, 0xe0, 0xfb, 0x8b, 0x09, 0x68, 0x45, 0x10, 0x98, 0x88,
-	0x09, 0x50, 0x34, 0x82, 0xb5, 0x37, 0xa6, 0x6d, 0x38, 0x6f, 0x4c, 0xfb, 0x50, 0xf3, 0x7c, 0x57,
-	0xf7, 0xf1, 0xa1, 0x89, 0xbd, 0xf5, 0x24, 0x15, 0x56, 0x5d, 0x4c, 0xd8, 0xcb, 0x00, 0xa9, 0x1d,
-	0x02, 0x31, 0x99, 0x97, 0xde, 0xcc, 0xfe, 0x83, 0x7e, 0x08, 0xe9, 0xae, 0x63, 0x60, 0xd7, 0x5b,
-	0x5f, 0xa2, 0xc2, 0x9e, 0x2c, 0x26, 0x6c, 0x87, 0xf2, 0x32, 0x7c, 0x0e, 0x44, 0x4c, 0x86, 0xed,
-	0x13, 0xd3, 0x75, 0xec, 0x3e, 0x19, 0xb3, 0x9e, 0x3a, 0x8f, 0xc9, 0xe4, 0x08, 0x02, 0x37, 0x59,
-	0x14, 0x54, 0xb4, 0x60, 0x65, 0x6a, 0xda, 0x90, 0x00, 0xc9, 0x63, 0x3c, 0x5a, 0x8f, 0x5f, 0x8f,
-	0xdf, 0xce, 0xa9, 0xe4, 0x27, 0xda, 0x81, 0xd4, 0x89, 0x6e, 0x0d, 0xf1, 0x7a, 0xe2, 0x7a, 0xfc,
-	0x76, 0x7e, 0xf3, 0x93, 0x39, 0x54, 0x68, 0x85, 0xa8, 0x2a, 0xe3, 0xdd, 0x4a, 0x3c, 0x8e, 0x8b,
-	0x0e, 0xac, 0xce, 0xcc, 0xe1, 0x29, 0xf2, 0x2a, 0x93, 0xf2, 0x4a, 0xf3, 0xc8, 0xdb, 0x09, 0x61,
-	0xa3, 0x02, 0xff, 0x00, 0xd6, 0xcf, 0x9a, 0xc7, 0x53, 0xe4, 0x3e, 0x9f, 0x94, 0xfb, 0x60, 0x0e,
-	0xb9, 0xd3, 0xe8, 0xa3, 0xa8, 0xf4, 0x2e, 0xe4, 0x23, 0x13, 0x7b, 0x8a, 0xc0, 0xa7, 0x93, 0x02,
-	0x6f, 0xcf, 0x35, 0xb7, 0x06, 0x76, 0xa7, 0x6c, 0x3a, 0x33, 0xc9, 0xef, 0xc7, 0xa6, 0x11, 0xd8,
-	0x88, 0x40, 0xe9, 0x9f, 0xb3, 0x70, 0xb9, 0x8e, 0x3d, 0x4f, 0x3f, 0xc4, 0x2f, 0x4d, 0xff, 0x28,
-	0x12, 0x43, 0xea, 0x00, 0xdd, 0xf0, 0x89, 0x0a, 0x9f, 0xcf, 0x59, 0xc6, 0x10, 0x6a, 0x04, 0x00,
-	0xfd, 0x00, 0x52, 0x74, 0x29, 0x2c, 0x6a, 0x9d, 0xdd, 0x98, 0xca, 0x18, 0xd1, 0x8f, 0x61, 0xa5,
-	0xeb, 0xf4, 0x0f, 0x4c, 0x1b, 0x6b, 0x03, 0x7d, 0x64, 0x39, 0xba, 0xb1, 0x9e, 0xa4, 0x58, 0x1b,
-	0xf3, 0x69, 0x45, 0x38, 0x5b, 0x8c, 0x71, 0x37, 0xa6, 0x16, 0xbb, 0x13, 0x14, 0xf4, 0x13, 0x58,
-	0xf5, 0x8c, 0x63, 0xad, 0x37, 0xb4, 0xa9, 0xdf, 0x69, 0xde, 0x00, 0x77, 0xd7, 0x97, 0x28, 0xfe,
-	0xe6, 0x1c, 0xf8, 0x6d, 0xe3, 0xb8, 0xca, 0x59, 0xdb, 0x03, 0xdc, 0xdd, 0x8d, 0xa9, 0x2b, 0xde,
-	0x24, 0x09, 0xbd, 0x84, 0xe2, 0x40, 0x77, 0x35, 0xc3, 0x09, 0xd5, 0x4f, 0x53, 0xf8, 0xbb, 0xf3,
-	0xac, 0x08, 0xdd, 0xad, 0x38, 0x63, 0xe5, 0x0b, 0x83, 0xc8, 0x33, 0x6a, 0x02, 0x0c, 0xc2, 0xe8,
-	0xbc, 0x9e, 0x39, 0xc7, 0xb2, 0xde, 0x8d, 0xa9, 0x11, 0x08, 0xa4, 0x42, 0x3e, 0x12, 0x8a, 0xd7,
-	0xb3, 0xe7, 0x59, 0xb8, 0xbb, 0x31, 0x35, 0x0a, 0x82, 0xda, 0x50, 0x70, 0xb1, 0x6e, 0x84, 0xef,
-	0x9e, 0x9b, 0x1b, 0x54, 0xc5, 0xba, 0x31, 0x7e, 0xf5, 0xbc, 0x3b, 0x7e, 0x24, 0x3e, 0xea, 0x99,
-	0x06, 0xd6, 0x4c, 0x7b, 0x30, 0xf4, 0xd7, 0xf3, 0x14, 0xf2, 0xce, 0x3c, 0xb3, 0x65, 0x1a, 0x58,
-	0x21, 0x3c, 0xbb, 0x31, 0x35, 0xe7, 0x05, 0x0f, 0xa8, 0x07, 0x7c, 0x3b, 0xd0, 0x4c, 0xdb, 0x1f,
-	0x4f, 0x53, 0x61, 0xc1, 0x00, 0xa2, 0xd8, 0x7e, 0x64, 0xae, 0x56, 0xdf, 0x4c, 0x13, 0x11, 0x06,
-	0x34, 0xb3, 0xb5, 0x8d, 0xd6, 0x97, 0xcf, 0x1f, 0xa7, 0xc6, 0x62, 0x22, 0x44, 0xb4, 0x0f, 0xcb,
-	0x93, 0xee, 0x5c, 0x9c, 0xdb, 0xdf, 0xa6, 0x7c, 0xb9, 0xd0, 0x8b, 0x3c, 0x6f, 0xa7, 0x61, 0xc9,
-	0x75, 0x1c, 0x5f, 0xfa, 0x8f, 0x38, 0x64, 0x5b, 0x9c, 0xe9, 0x7d, 0x87, 0x8b, 0x3b, 0x80, 0x88,
-	0x0c, 0x2d, 0x74, 0x4a, 0xcd, 0x34, 0x58, 0xa2, 0x91, 0x53, 0x05, 0xf2, 0x4f, 0xe8, 0xbb, 0x8a,
-	0x41, 0x36, 0xec, 0x82, 0x61, 0x7a, 0x03, 0x4b, 0x1f, 0x69, 0x86, 0xee, 0xeb, 0x3c, 0x2e, 0xcc,
-	0xe3, 0x5c, 0x15, 0xc6, 0x56, 0xd1, 0x7d, 0x5d, 0xcd, 0x1b, 0xe3, 0x07, 0xe9, 0x8f, 0x97, 0x00,
-	0xc6, 0x0b, 0x04, 0x5d, 0x83, 0xfc, 0xd0, 0x36, 0x7f, 0x3a, 0xc4, 0x9a, 0xad, 0xf7, 0xf1, 0x7a,
-	0x8a, 0xc6, 0x62, 0x60, 0xa4, 0x86, 0xde, 0xc7, 0x68, 0x07, 0x96, 0xa8, 0x8d, 0xe3, 0xe7, 0xb2,
-	0xb1, 0x4a, 0x99, 0xd1, 0x4d, 0x58, 0xf6, 0x86, 0x07, 0x91, 0xd4, 0x8d, 0xbd, 0xf0, 0x24, 0x91,
-	0xa4, 0x27, 0xd4, 0xe1, 0x83, 0x5c, 0xe8, 0xc9, 0x42, 0x6b, 0xbd, 0x44, 0x7d, 0x3d, 0x48, 0x4f,
-	0x18, 0x10, 0xea, 0x40, 0xc6, 0x19, 0xfa, 0x14, 0x93, 0xa5, 0x3c, 0x5b, 0x8b, 0x61, 0x36, 0x19,
-	0x33, 0x03, 0x0d, 0xa0, 0x66, 0xa6, 0x25, 0x7d, 0xe1, 0x69, 0x11, 0x9f, 0x40, 0x3e, 0xa2, 0xff,
-	0x29, 0x5b, 0xe3, 0x5a, 0x74, 0x6b, 0xcc, 0x45, 0xf7, 0xd6, 0x2d, 0x28, 0x44, 0xd5, 0x5c, 0x84,
-	0x57, 0xfa, 0xb7, 0x65, 0xb8, 0xd4, 0xf6, 0x75, 0xdb, 0xd0, 0x5d, 0x63, 0xfc, 0xda, 0x9e, 0xf4,
-	0x77, 0x49, 0x80, 0x96, 0x6b, 0xf6, 0x4d, 0xdf, 0x3c, 0xc1, 0x1e, 0xfa, 0x04, 0xd2, 0xad, 0xb2,
-	0xaa, 0x55, 0x9a, 0x42, 0x4c, 0xbc, 0xf1, 0x4b, 0x92, 0xaa, 0xff, 0xde, 0xd0, 0xb5, 0xb7, 0xc8,
-	0x4b, 0x6e, 0x85, 0x13, 0xb8, 0x35, 0xd0, 0x5d, 0xc3, 0xd9, 0x3a, 0xd9, 0x40, 0x77, 0x20, 0x53,
-	0xad, 0x95, 0x3b, 0x1d, 0xb9, 0x21, 0xc4, 0xc5, 0x6b, 0x74, 0xfc, 0xd5, 0xa9, 0xb1, 0x3d, 0x4b,
-	0xf7, 0x7d, 0x6c, 0x93, 0xd1, 0x9f, 0x42, 0xe1, 0x99, 0xda, 0xdc, 0x6b, 0x69, 0xdb, 0xaf, 0xb5,
-	0x17, 0xf2, 0x6b, 0x21, 0x21, 0xde, 0xa4, 0x2c, 0xdf, 0x98, 0x62, 0x39, 0x74, 0x9d, 0xe1, 0x40,
-	0x3b, 0x18, 0x69, 0xc7, 0x78, 0xc4, 0xa5, 0x28, 0xf5, 0xd6, 0x5e, 0xad, 0x2d, 0x0b, 0xc9, 0x33,
-	0xa4, 0x98, 0xfd, 0xc1, 0xd0, 0xf2, 0x30, 0x19, 0xfd, 0x08, 0x8a, 0xe5, 0x76, 0x5b, 0x79, 0xd6,
-	0xe0, 0x95, 0x48, 0x5b, 0x58, 0x12, 0x3f, 0xa4, 0x4c, 0x5f, 0x9f, 0x62, 0x8a, 0x84, 0x4a, 0xc6,
-	0x98, 0xef, 0xc8, 0xed, 0x8e, 0xd6, 0xee, 0xa8, 0x72, 0xb9, 0x2e, 0xa4, 0xc4, 0x5b, 0x94, 0xeb,
-	0xfa, 0x29, 0x06, 0xf0, 0xb1, 0xe7, 0x7b, 0xbe, 0x4b, 0x88, 0x27, 0x1b, 0xe8, 0x01, 0xe4, 0xeb,
-	0xe5, 0x56, 0x28, 0x2e, 0x7d, 0x86, 0xb8, 0xbe, 0x3e, 0xd0, 0x98, 0x48, 0x8f, 0x70, 0x3d, 0x86,
-	0xe5, 0xba, 0xac, 0x3e, 0x93, 0x43, 0xbe, 0x8c, 0xf8, 0x4d, 0xca, 0x77, 0x6d, 0x9a, 0x0f, 0xbb,
-	0x87, 0x38, 0xc2, 0x29, 0xf9, 0xb0, 0x56, 0xc1, 0x03, 0x17, 0x77, 0x75, 0x1f, 0x1b, 0x91, 0xc9,
-	0xbb, 0x05, 0x4b, 0xaa, 0x5c, 0xae, 0x08, 0x31, 0xf1, 0x03, 0x0a, 0x74, 0x65, 0x0a, 0x88, 0x6c,
-	0x3c, 0x5c, 0xdf, 0x1d, 0x55, 0x2e, 0x77, 0x64, 0x6d, 0x5f, 0x91, 0x5f, 0x0a, 0xf1, 0x33, 0xf4,
-	0xed, 0xba, 0x58, 0xf7, 0xb1, 0x76, 0x62, 0xe2, 0x37, 0x44, 0xea, 0x7f, 0xc5, 0x79, 0x85, 0xe6,
-	0x99, 0x3e, 0xf6, 0xd0, 0x77, 0x61, 0x65, 0xa7, 0x59, 0xdf, 0x56, 0x1a, 0xb2, 0xd6, 0x92, 0x55,
-	0x3a, 0x9f, 0x31, 0xf1, 0x23, 0x0a, 0x74, 0x63, 0x1a, 0x28, 0x48, 0x7a, 0xb0, 0x1b, 0x4c, 0xe9,
-	0x53, 0x10, 0x02, 0x6e, 0x56, 0x36, 0xd6, 0x5e, 0x0b, 0x71, 0xf1, 0x36, 0x65, 0x97, 0xce, 0x60,
-	0x3f, 0xb4, 0x9c, 0x03, 0xdd, 0xb2, 0x28, 0xff, 0x3d, 0xc8, 0xa9, 0x72, 0x7b, 0x77, 0xaf, 0x5a,
-	0xad, 0xc9, 0x42, 0x22, 0x70, 0xd5, 0x99, 0xf7, 0xf5, 0x8e, 0x86, 0xbd, 0x9e, 0x85, 0xf9, 0x4b,
-	0xbf, 0x54, 0x95, 0x8e, 0xac, 0x55, 0x95, 0x9a, 0xdc, 0x16, 0x92, 0x67, 0xf9, 0x84, 0x6b, 0xfa,
-	0x58, 0xeb, 0x99, 0x16, 0xa6, 0xa6, 0xfe, 0xdd, 0x12, 0xac, 0xf2, 0xcc, 0x2b, 0x92, 0x59, 0x6e,
-	0x41, 0x31, 0x7c, 0xf7, 0x67, 0xdb, 0x2f, 0x76, 0xf6, 0x85, 0x58, 0xe0, 0x2c, 0x67, 0xbd, 0xfa,
-	0xe1, 0xc1, 0x71, 0xf7, 0x84, 0xe8, 0xa1, 0x82, 0x18, 0xf0, 0xb2, 0xe9, 0x2f, 0xef, 0xec, 0xec,
-	0xd5, 0xf7, 0x6a, 0xe5, 0x4e, 0x53, 0x25, 0x05, 0xf6, 0x26, 0xc5, 0xb9, 0x73, 0x06, 0x0e, 0xf3,
-	0x05, 0xbd, 0xdb, 0x1d, 0xf6, 0x87, 0x96, 0xee, 0x3b, 0x2e, 0x75, 0xa5, 0x1a, 0x7c, 0x2d, 0xc0,
-	0x94, 0x5f, 0x75, 0xd4, 0xf2, 0x4e, 0x47, 0x6b, 0xee, 0x75, 0x5a, 0x7b, 0x1d, 0x52, 0x71, 0xdf,
-	0xa5, 0x80, 0xdf, 0x3a, 0x03, 0x10, 0x7f, 0xe1, 0xbb, 0x7a, 0xd7, 0xd7, 0x78, 0xc4, 0x9b, 0xd2,
-	0x90, 0xcf, 0xac, 0xd6, 0x52, 0x65, 0x4e, 0x12, 0x92, 0xef, 0xd0, 0x90, 0x4f, 0xb2, 0x46, 0xfc,
-	0x93, 0x91, 0x08, 0xe6, 0x01, 0x48, 0xd3, 0x98, 0xa7, 0xbc, 0xfd, 0x92, 0xb8, 0x45, 0xb1, 0x1f,
-	0xbc, 0x03, 0xfb, 0x74, 0x2b, 0xfc, 0x18, 0xae, 0x4d, 0xcb, 0x98, 0xb6, 0x46, 0x4a, 0x7c, 0x44,
-	0x05, 0x6c, 0xbc, 0x43, 0xc0, 0x29, 0x56, 0x79, 0x0e, 0x57, 0x42, 0x8f, 0x25, 0x41, 0x4c, 0xae,
-	0x68, 0xfb, 0xe5, 0xda, 0x9e, 0x4c, 0xd6, 0x7b, 0x89, 0x82, 0xde, 0x3e, 0xcb, 0x6f, 0x49, 0x38,
-	0xc3, 0x86, 0x46, 0x83, 0x31, 0xf5, 0xaa, 0xdf, 0x26, 0xe0, 0x6a, 0x7b, 0x60, 0x99, 0xbe, 0xaf,
-	0x1f, 0x58, 0x98, 0xa6, 0xc6, 0x11, 0xef, 0xaa, 0xc1, 0xe5, 0x56, 0x59, 0x51, 0xb5, 0x97, 0x4a,
-	0x67, 0x57, 0x53, 0xe5, 0x76, 0x47, 0x55, 0x76, 0x3a, 0x4a, 0xb3, 0x21, 0xc4, 0xc4, 0x0d, 0x2a,
-	0xe8, 0xdb, 0x53, 0x82, 0x3c, 0xa3, 0xa7, 0x0d, 0x74, 0xd3, 0xd5, 0xde, 0x98, 0xfe, 0x91, 0xe6,
-	0x62, 0xcf, 0x77, 0x4d, 0xba, 0x31, 0x13, 0xbd, 0x2b, 0xb0, 0xda, 0x6e, 0xd5, 0x94, 0xce, 0x04,
-	0x52, 0x5c, 0xfc, 0x84, 0x22, 0x7d, 0x74, 0x0a, 0x92, 0x47, 0x14, 0x9b, 0x46, 0x69, 0xc0, 0x95,
-	0x96, 0xda, 0xdc, 0x91, 0xdb, 0x6d, 0x62, 0x57, 0xb9, 0xa2, 0xc9, 0x35, 0xb9, 0x2e, 0x37, 0xa8,
-	0x83, 0x9d, 0xee, 0x0f, 0x54, 0x29, 0xd7, 0xe9, 0x62, 0xcf, 0x23, 0x26, 0xc5, 0x86, 0x86, 0x2d,
-	0x4c, 0x6b, 0x42, 0x82, 0xb7, 0x0d, 0x42, 0x80, 0x17, 0x22, 0x25, 0xc5, 0x3b, 0x14, 0xe9, 0xd6,
-	0x5b, 0x90, 0x22, 0x18, 0xd2, 0x1f, 0xc6, 0xe1, 0x4a, 0xb0, 0xa5, 0x85, 0xf9, 0x70, 0x67, 0x34,
-	0xc0, 0x9e, 0x74, 0x04, 0x4b, 0xb2, 0x3d, 0xec, 0xa3, 0xbb, 0x90, 0x55, 0x3a, 0xb2, 0x5a, 0xde,
-	0xae, 0xc9, 0xe3, 0x0d, 0x8d, 0xc2, 0x8f, 0xb3, 0xee, 0x2d, 0xd3, 0xc7, 0x2e, 0x99, 0x07, 0xa2,
-	0xd7, 0x5d, 0xc8, 0xd6, 0xf7, 0x6a, 0x1d, 0xa5, 0x5e, 0x6e, 0x09, 0xf1, 0xb3, 0x18, 0xfa, 0x43,
-	0xcb, 0x37, 0xfb, 0xfa, 0x80, 0x28, 0xf1, 0xcb, 0x04, 0xe4, 0x23, 0x45, 0xc3, 0x74, 0x9a, 0x15,
-	0x9f, 0x49, 0xb3, 0xae, 0x42, 0x96, 0x56, 0x83, 0x9a, 0x69, 0xf0, 0x5d, 0x3a, 0x43, 0x9f, 0x15,
-	0x03, 0xb5, 0x00, 0x4c, 0x4f, 0x3b, 0x70, 0x86, 0xb6, 0x81, 0x59, 0x69, 0x58, 0x9c, 0xab, 0x34,
-	0x54, 0xbc, 0x6d, 0xc6, 0x53, 0x22, 0x2f, 0xad, 0xe6, 0xcc, 0xe0, 0x19, 0x6d, 0xc2, 0xe5, 0xd9,
-	0x3c, 0x9d, 0x48, 0x5e, 0xa2, 0x92, 0x67, 0x7a, 0x47, 0x23, 0xc5, 0x98, 0xc9, 0x79, 0x52, 0x17,
-	0x4f, 0x45, 0x7f, 0x95, 0x86, 0x2b, 0xf2, 0x17, 0xb8, 0x3b, 0xa4, 0xfe, 0xde, 0xf6, 0xf5, 0xc3,
-	0xb0, 0x6a, 0x6d, 0x41, 0x3e, 0xd2, 0x01, 0xe2, 0xc9, 0xe7, 0xa2, 0xed, 0x80, 0x28, 0x04, 0xc9,
-	0x81, 0x58, 0x35, 0xc5, 0x73, 0x20, 0x93, 0x57, 0x46, 0xf9, 0xf1, 0x0c, 0x06, 0x79, 0xa7, 0x3c,
-	0x8f, 0x9c, 0x53, 0xf5, 0x1e, 0x17, 0x60, 0x8a, 0xa1, 0x42, 0x58, 0x80, 0x79, 0xe8, 0x1b, 0x13,
-	0x8d, 0xcb, 0x25, 0x9a, 0xfd, 0x46, 0x3b, 0x8f, 0xeb, 0xe3, 0x3c, 0x35, 0x45, 0xff, 0x0c, 0x73,
-	0xcd, 0xc9, 0xfa, 0x23, 0x7d, 0xd1, 0xfa, 0xa3, 0x07, 0xf9, 0xa1, 0x87, 0x5d, 0xcd, 0xf3, 0x75,
-	0x1f, 0x7b, 0xeb, 0x99, 0x8b, 0xbe, 0xf0, 0x9e, 0x87, 0xdd, 0x36, 0xc1, 0x22, 0x2f, 0x3c, 0x0c,
-	0x1e, 0x3c, 0xf4, 0x1a, 0xd2, 0xbe, 0xd9, 0xc7, 0xae, 0xb7, 0x9e, 0xa5, 0x22, 0xca, 0xe7, 0x17,
-	0xd1, 0x21, 0x38, 0x8a, 0xa1, 0x72, 0x40, 0xb1, 0x09, 0xf9, 0x88, 0x99, 0xd1, 0x0d, 0x28, 0x44,
-	0x8b, 0x29, 0xbe, 0xb6, 0xf2, 0xfe, 0xb8, 0x8e, 0x42, 0x5f, 0x07, 0xb0, 0x9c, 0xae, 0x6e, 0xb1,
-	0xc5, 0xc7, 0x1c, 0x20, 0x47, 0x29, 0x64, 0xed, 0x11, 0xc0, 0xc8, 0x6b, 0xbc, 0x07, 0xc0, 0x17,
-	0x90, 0xe1, 0x4a, 0x5f, 0x1c, 0x4c, 0xfa, 0x2a, 0x03, 0x85, 0x68, 0x9b, 0x04, 0x3d, 0x83, 0x94,
-	0xe1, 0x68, 0x3d, 0x9b, 0xaf, 0x8a, 0x73, 0x74, 0x71, 0xd4, 0x25, 0xc3, 0xa9, 0xda, 0xa8, 0x06,
-	0x30, 0xd0, 0x5d, 0xbd, 0x8f, 0x7d, 0x32, 0x4f, 0xac, 0xd9, 0x7d, 0x67, 0xbe, 0xa6, 0x0d, 0x63,
-	0x52, 0x23, 0xfc, 0xe8, 0x27, 0xa7, 0x2d, 0xa5, 0xef, 0x2f, 0xd8, 0x03, 0x1a, 0x2f, 0xa0, 0xa0,
-	0x3d, 0x1f, 0x59, 0x44, 0x44, 0x02, 0x99, 0x23, 0x5a, 0xf4, 0x07, 0x05, 0xdd, 0xe2, 0x12, 0x08,
-	0x04, 0xb1, 0x42, 0x28, 0x21, 0x24, 0x10, 0x09, 0xd4, 0xc9, 0xb8, 0x84, 0xd4, 0xf9, 0x24, 0xd0,
-	0xb9, 0x8f, 0x4a, 0xf0, 0x43, 0x02, 0x09, 0x04, 0x5e, 0xb8, 0xc5, 0xd3, 0xe5, 0x9c, 0x55, 0x23,
-	0x14, 0x74, 0x0f, 0xd6, 0x22, 0x7b, 0xac, 0x16, 0xee, 0x09, 0x19, 0xea, 0x16, 0x28, 0xf2, 0xdf,
-	0x0e, 0xdf, 0x1e, 0xee, 0xc3, 0x65, 0x17, 0xff, 0x74, 0x48, 0x4a, 0x0f, 0xad, 0x67, 0xda, 0xba,
-	0x65, 0xfe, 0x4c, 0x0f, 0xdb, 0x5b, 0x59, 0x75, 0x2d, 0xf8, 0xb3, 0x1a, 0xf9, 0x4f, 0x3c, 0x86,
-	0x95, 0x29, 0x4b, 0x9f, 0x52, 0x36, 0x6e, 0x4f, 0x76, 0x63, 0x17, 0x6a, 0x40, 0x45, 0x0b, 0x54,
-	0x22, 0x6c, 0xd2, 0xe8, 0xef, 0x49, 0x58, 0x00, 0x3a, 0x25, 0x6c, 0xca, 0xfe, 0xef, 0x47, 0x58,
-	0x08, 0x1a, 0x2d, 0x9f, 0x7f, 0x1d, 0x87, 0x5c, 0xb8, 0x1a, 0xd0, 0x73, 0x58, 0xf2, 0x47, 0x03,
-	0xb6, 0xbb, 0x17, 0x37, 0x3f, 0x5d, 0x64, 0x25, 0x95, 0x48, 0x82, 0xc2, 0xf6, 0x69, 0x8a, 0x21,
-	0x7e, 0x06, 0x4b, 0x84, 0x24, 0xa9, 0x3c, 0x65, 0x59, 0x81, 0xfc, 0x5e, 0xa3, 0xdd, 0x92, 0x77,
-	0x94, 0xaa, 0x22, 0x57, 0x84, 0x18, 0x02, 0x48, 0xb3, 0x0a, 0x51, 0x88, 0xa3, 0x35, 0x10, 0x5a,
-	0x4a, 0x4b, 0xae, 0x91, 0x2c, 0xb4, 0xd9, 0x22, 0xa9, 0x5c, 0x5b, 0x48, 0xa0, 0xaf, 0xc1, 0xa5,
-	0x48, 0x72, 0xa7, 0x91, 0x94, 0xf7, 0x85, 0xac, 0x0a, 0x49, 0x52, 0xdc, 0xe7, 0x42, 0xdb, 0x21,
-	0x15, 0x80, 0xbe, 0x90, 0x16, 0x69, 0xf3, 0xcc, 0x93, 0x5e, 0xec, 0x13, 0xa6, 0x10, 0x66, 0x37,
-	0xa6, 0xe6, 0x28, 0x0c, 0xc5, 0xac, 0x41, 0xf6, 0x40, 0x3f, 0x64, 0x88, 0x89, 0xb9, 0x1b, 0x47,
-	0xdb, 0xfa, 0x61, 0x14, 0x2f, 0x73, 0xa0, 0x1f, 0x52, 0xb4, 0xcf, 0x81, 0x37, 0xb5, 0x69, 0xba,
-	0x42, 0x30, 0x59, 0x1f, 0xec, 0xe1, 0xdc, 0xfd, 0x71, 0x9a, 0xca, 0x8c, 0x91, 0x97, 0x43, 0xb8,
-	0x40, 0x5b, 0x52, 0x84, 0x47, 0x3a, 0xe3, 0xf3, 0x68, 0x5b, 0xd7, 0x07, 0x13, 0xda, 0xf6, 0xf5,
-	0x41, 0x80, 0xe6, 0x61, 0x9f, 0xa1, 0xa5, 0xe6, 0x46, 0x6b, 0x63, 0x7f, 0x02, 0xcd, 0xc3, 0x7e,
-	0xd0, 0x93, 0x24, 0x48, 0xd2, 0xb7, 0xa1, 0x38, 0x69, 0xf0, 0x89, 0x8c, 0x31, 0x3e, 0x91, 0x31,
-	0x4a, 0x8f, 0xa1, 0x10, 0xb5, 0x25, 0xba, 0x0d, 0x02, 0xcf, 0x90, 0xb5, 0x29, 0x96, 0x22, 0xa7,
-	0xf3, 0x60, 0x22, 0x7d, 0x15, 0x07, 0x34, 0x6b, 0x32, 0x12, 0x95, 0x22, 0x65, 0xd5, 0x34, 0x08,
-	0x8a, 0xfc, 0x17, 0x44, 0xa5, 0x1f, 0xd2, 0xb4, 0x85, 0x16, 0x3a, 0x3d, 0x9b, 0xfb, 0xc0, 0x79,
-	0x76, 0xaa, 0x1c, 0x47, 0xa9, 0xda, 0xd2, 0x3e, 0x14, 0xa2, 0x36, 0x47, 0xd7, 0xa1, 0x40, 0x8a,
-	0xb2, 0x29, 0x65, 0xe0, 0x18, 0x8f, 0x02, 0x25, 0x6e, 0x42, 0x91, 0xb9, 0xf6, 0x54, 0x6a, 0x5d,
-	0xa0, 0xd4, 0x9d, 0xb1, 0xb5, 0xa2, 0xd6, 0x5f, 0xc0, 0x5a, 0x5f, 0xc6, 0x21, 0x17, 0xc6, 0x05,
-	0xd4, 0x66, 0x9b, 0x87, 0x66, 0x38, 0x7d, 0xdd, 0xb4, 0x79, 0x14, 0xd8, 0x9c, 0x33, 0xb4, 0x54,
-	0x28, 0x13, 0x8b, 0x00, 0x74, 0xbf, 0x60, 0x04, 0xf2, 0x0a, 0x6c, 0x47, 0x9a, 0x7e, 0x05, 0x4a,
-	0x0d, 0x14, 0xf9, 0x01, 0xe4, 0xc2, 0x6c, 0x5f, 0xba, 0x7f, 0x56, 0xc8, 0x58, 0x86, 0xdc, 0x5e,
-	0x63, 0xbb, 0xb9, 0xd7, 0xa8, 0xc8, 0x15, 0x21, 0x8e, 0xf2, 0x90, 0x09, 0x1e, 0x12, 0xd2, 0x5f,
-	0xc7, 0x21, 0x1f, 0x39, 0x90, 0x40, 0xcf, 0x21, 0xed, 0x39, 0x43, 0xb7, 0x8b, 0x2f, 0x90, 0x65,
-	0x70, 0x84, 0xa9, 0x02, 0x26, 0x71, 0xf1, 0x02, 0x46, 0x32, 0x60, 0x75, 0xe6, 0x48, 0x02, 0x35,
-	0x21, 0xc7, 0x5b, 0x77, 0x17, 0xca, 0x8d, 0xb2, 0x0c, 0xa4, 0x6a, 0x4b, 0x7f, 0x16, 0x87, 0xe2,
-	0xe4, 0xf9, 0xda, 0x94, 0x5b, 0xc7, 0xdf, 0x83, 0x5b, 0x9f, 0xb9, 0xb6, 0x12, 0x67, 0xad, 0x2d,
-	0xe9, 0x77, 0x69, 0x58, 0xed, 0x60, 0xcf, 0x6f, 0xd3, 0x56, 0x63, 0xa0, 0xda, 0xd9, 0xf1, 0x00,
-	0xa9, 0x90, 0xc6, 0x27, 0xb4, 0x7e, 0x48, 0xcc, 0xdd, 0x04, 0x9f, 0x11, 0x50, 0x92, 0x09, 0x84,
-	0xca, 0x91, 0xc4, 0xff, 0x5c, 0x82, 0x14, 0xa5, 0xa0, 0x13, 0x58, 0x79, 0xa3, 0xfb, 0xd8, 0xed,
-	0xeb, 0xee, 0xb1, 0x46, 0xff, 0xe5, 0x86, 0x79, 0x71, 0x7e, 0x31, 0xa5, 0xb2, 0x71, 0xa2, 0xdb,
-	0x5d, 0xfc, 0x32, 0x00, 0xde, 0x8d, 0xa9, 0xc5, 0x50, 0x0a, 0x93, 0xfb, 0x65, 0x1c, 0x2e, 0xf3,
-	0x06, 0x00, 0xd9, 0x18, 0xe8, 0xda, 0x63, 0xe2, 0x59, 0xb8, 0x69, 0x5d, 0x5c, 0x7c, 0x2b, 0x84,
-	0x27, 0x6b, 0x74, 0x37, 0xa6, 0x5e, 0x1a, 0x4c, 0x50, 0x98, 0x22, 0x7d, 0x58, 0x0e, 0x02, 0x06,
-	0x93, 0xcf, 0xb6, 0xa7, 0xea, 0x85, 0xe4, 0x1b, 0x32, 0xef, 0x69, 0xec, 0xc6, 0xd4, 0x02, 0x87,
-	0xa7, 0xff, 0x89, 0x8f, 0x40, 0x98, 0xb6, 0x0e, 0xfa, 0x10, 0x96, 0x6d, 0xfc, 0x46, 0x0b, 0x2d,
-	0x44, 0x67, 0x20, 0xa9, 0x16, 0x6c, 0xfc, 0x26, 0x1c, 0x24, 0x6e, 0xc3, 0xe5, 0x53, 0xdf, 0x0b,
-	0x7d, 0x0b, 0x04, 0x9d, 0xfd, 0xa1, 0x19, 0x43, 0x97, 0x65, 0x8f, 0x0c, 0x60, 0x85, 0xd3, 0x2b,
-	0x9c, 0x2c, 0xba, 0x90, 0x8f, 0xe8, 0x86, 0xba, 0x90, 0x0d, 0x7a, 0x2f, 0xfc, 0x3a, 0xce, 0xb3,
-	0x73, 0xbd, 0x35, 0x51, 0xc3, 0xf3, 0xf5, 0xfe, 0x00, 0x07, 0xd8, 0x6a, 0x08, 0xbc, 0x9d, 0x81,
-	0x14, 0xb5, 0xab, 0xf8, 0x23, 0x40, 0xb3, 0x03, 0xd1, 0x47, 0xb0, 0x82, 0x6d, 0xe2, 0xea, 0x61,
-	0x2f, 0x89, 0x2a, 0x5f, 0x50, 0x8b, 0x9c, 0x1c, 0x0c, 0xfc, 0x00, 0x72, 0x7e, 0xc0, 0x4e, 0x7d,
-	0x24, 0xa9, 0x8e, 0x09, 0xd2, 0x7f, 0x27, 0x61, 0xf5, 0xa5, 0x6b, 0xfa, 0xb8, 0x6a, 0x5a, 0xd8,
-	0x0b, 0x56, 0x55, 0x15, 0x96, 0x3c, 0xd3, 0x3e, 0xbe, 0x48, 0xad, 0x45, 0xf8, 0xd1, 0x8f, 0x60,
-	0x85, 0x94, 0x7b, 0xba, 0x1f, 0x9e, 0xc4, 0x5f, 0x60, 0x53, 0x2c, 0x32, 0xa8, 0x80, 0x46, 0x2c,
-	0xc0, 0x82, 0x16, 0x36, 0x34, 0xda, 0xa9, 0xf6, 0xa8, 0x0b, 0x66, 0xd5, 0x62, 0x40, 0xa6, 0x2f,
-	0xe6, 0xa1, 0xef, 0x82, 0xc8, 0xef, 0xa1, 0x19, 0x24, 0xeb, 0xec, 0x9b, 0x36, 0x36, 0x34, 0xef,
-	0x48, 0x77, 0x0d, 0xd3, 0x3e, 0xa4, 0xb9, 0x4f, 0x56, 0x5d, 0x67, 0x23, 0x2a, 0xe1, 0x80, 0x36,
-	0xff, 0x1f, 0xe1, 0xc9, 0x0a, 0x8f, 0x55, 0x47, 0x95, 0x79, 0xce, 0x75, 0xa7, 0xcd, 0xfa, 0xb6,
-	0x32, 0xef, 0xff, 0xb5, 0x36, 0x91, 0x7e, 0x01, 0x29, 0x1a, 0x56, 0xe9, 0x44, 0x8f, 0x13, 0xe0,
-	0xf3, 0x4d, 0x34, 0xc9, 0x02, 0x4a, 0x70, 0x29, 0x6c, 0xb7, 0x84, 0xc1, 0x3c, 0x38, 0xf0, 0x5c,
-	0x0d, 0xff, 0xe2, 0xb1, 0xdc, 0x93, 0xfe, 0x29, 0x09, 0xc5, 0xa0, 0x5d, 0xc9, 0xee, 0xe1, 0x48,
-	0x7f, 0x91, 0xe4, 0x3b, 0xf8, 0x4d, 0x48, 0x6d, 0xbf, 0xee, 0xc8, 0x6d, 0x21, 0x26, 0x5e, 0xa5,
-	0x3d, 0xc7, 0x4b, 0xb4, 0xe7, 0x48, 0x51, 0xb7, 0x0e, 0x46, 0x3e, 0x6d, 0x1b, 0xa3, 0x6f, 0x40,
-	0xe2, 0xc5, 0xbe, 0x10, 0x17, 0xaf, 0xd0, 0x21, 0x42, 0x64, 0xc8, 0x31, 0x3d, 0x5a, 0xb8, 0x05,
-	0xe9, 0xfd, 0xb2, 0xaa, 0x34, 0x3a, 0x42, 0x42, 0x14, 0xe9, 0x98, 0xb5, 0xc8, 0x98, 0x13, 0xdd,
-	0x35, 0x6d, 0x9f, 0x8c, 0xfb, 0x38, 0xd2, 0x15, 0x4d, 0x4e, 0x9c, 0x15, 0xb1, 0x91, 0xd1, 0x86,
-	0xe8, 0x4d, 0x48, 0x75, 0x94, 0xba, 0xac, 0x0a, 0x4b, 0xa7, 0x68, 0x46, 0x53, 0x13, 0x76, 0x96,
-	0xb5, 0xa2, 0x34, 0x3a, 0xb2, 0xba, 0x1f, 0xde, 0xff, 0x13, 0x52, 0x13, 0x07, 0x2c, 0x1c, 0xd8,
-	0xf6, 0xb1, 0x7b, 0xa2, 0x5b, 0xfc, 0x30, 0x8b, 0x1d, 0xcb, 0x2c, 0xd7, 0xe4, 0xc6, 0xb3, 0xce,
-	0xae, 0xd6, 0x52, 0xe5, 0xaa, 0xf2, 0x4a, 0x48, 0x4f, 0x74, 0x5d, 0x19, 0x9f, 0x85, 0xed, 0x43,
-	0xff, 0x48, 0x1b, 0xb8, 0xb8, 0x67, 0x7e, 0xc1, 0xb9, 0x26, 0x6e, 0x1b, 0x0a, 0x99, 0x53, 0xb8,
-	0xd8, 0x79, 0x51, 0x44, 0xd6, 0xa7, 0x50, 0x64, 0xc3, 0x83, 0xde, 0xbd, 0x90, 0x15, 0x25, 0xca,
-	0xf6, 0x41, 0x84, 0x2d, 0x5c, 0x60, 0xcc, 0x77, 0x4e, 0x36, 0xa4, 0x3f, 0x4a, 0x07, 0x59, 0x48,
-	0xf4, 0x72, 0xc2, 0xfb, 0xce, 0x42, 0xd0, 0x3e, 0x14, 0xd8, 0xc1, 0x86, 0xe7, 0xeb, 0xfe, 0xd0,
-	0xe3, 0xf9, 0xd3, 0xfd, 0x79, 0x2a, 0x14, 0xc2, 0xd6, 0xa6, 0x5c, 0x2c, 0x83, 0xca, 0xf7, 0xc7,
-	0x14, 0x74, 0x2b, 0x08, 0x1a, 0xe3, 0x94, 0x23, 0x49, 0xd7, 0xd7, 0x32, 0x23, 0x07, 0x49, 0x74,
-	0x05, 0x32, 0xbe, 0x6b, 0x1e, 0x1e, 0x62, 0x97, 0x17, 0x47, 0x1f, 0xcf, 0x13, 0xe1, 0x19, 0x87,
-	0x1a, 0xb0, 0x22, 0x0c, 0xab, 0x61, 0x26, 0x63, 0x3a, 0xb6, 0x46, 0x58, 0x68, 0x79, 0x54, 0xdc,
-	0x7c, 0x3c, 0x07, 0x5e, 0x39, 0xc2, 0x5b, 0x77, 0x0c, 0x5e, 0x2a, 0x0b, 0xfa, 0x14, 0x99, 0xe4,
-	0xe0, 0xac, 0x71, 0x4a, 0xd3, 0x01, 0xda, 0x5f, 0x99, 0x2f, 0x07, 0x67, 0x27, 0xe8, 0x64, 0x77,
-	0xe1, 0x39, 0xb8, 0x13, 0x12, 0xd0, 0x01, 0x08, 0x5d, 0xcb, 0xa1, 0x49, 0xc6, 0x01, 0x3e, 0xd2,
-	0x4f, 0x4c, 0xc7, 0xa5, 0xfd, 0x98, 0xe2, 0xe6, 0xa3, 0x79, 0x2a, 0x50, 0xc6, 0xba, 0xcd, 0x39,
-	0x19, 0xfc, 0x4a, 0x77, 0x92, 0x4a, 0xb7, 0x60, 0xcb, 0xa2, 0x0e, 0x66, 0xe9, 0x3e, 0xb6, 0xb1,
-	0xe7, 0xd1, 0x06, 0x0e, 0xd9, 0x82, 0x19, 0xbd, 0xc6, 0xc9, 0xa4, 0x1c, 0x6e, 0xda, 0x44, 0xb1,
-	0x80, 0x99, 0xde, 0x39, 0x9a, 0xaf, 0xe1, 0x30, 0xc9, 0xc8, 0x74, 0x99, 0x42, 0x43, 0x1b, 0x70,
-	0x59, 0xf7, 0x3c, 0xf3, 0xd0, 0xf6, 0x34, 0xdf, 0xd1, 0x1c, 0x3b, 0x38, 0x64, 0x5e, 0x07, 0xba,
-	0x3f, 0x20, 0xfe, 0x67, 0xc7, 0x69, 0xda, 0x98, 0xf9, 0xbf, 0xf4, 0x63, 0xc8, 0x47, 0x9c, 0x4d,
-	0xaa, 0x9f, 0x55, 0x81, 0xac, 0x40, 0xbe, 0xd1, 0x6c, 0xd0, 0x33, 0x3e, 0xa5, 0xf1, 0x4c, 0x88,
-	0x53, 0x82, 0x2c, 0x57, 0xda, 0xec, 0xd8, 0x4f, 0x48, 0x20, 0x04, 0xc5, 0x72, 0x4d, 0x95, 0xcb,
-	0x15, 0x7e, 0x12, 0x58, 0x11, 0x92, 0x52, 0x1d, 0x84, 0xe9, 0xf9, 0x97, 0x9e, 0x9c, 0x25, 0xa2,
-	0x08, 0x50, 0x51, 0xda, 0x3b, 0x65, 0xb5, 0xc2, 0x24, 0x08, 0x50, 0x08, 0x0f, 0x13, 0x09, 0x25,
-	0x21, 0xfd, 0x10, 0x56, 0xa6, 0xe6, 0x44, 0x7a, 0xfa, 0x16, 0x85, 0xe5, 0xba, 0xd2, 0xd1, 0xca,
-	0xb5, 0x97, 0xe5, 0xd7, 0x6d, 0xd6, 0x6a, 0xa1, 0x04, 0xa5, 0xaa, 0x35, 0x9a, 0x0d, 0xb9, 0xde,
-	0xea, 0xbc, 0x16, 0x12, 0x52, 0x6b, 0x7a, 0x4a, 0xde, 0x8a, 0x58, 0x55, 0x54, 0x79, 0x02, 0x91,
-	0x12, 0x26, 0x11, 0x0f, 0x00, 0xc6, 0x2e, 0x29, 0x75, 0xce, 0x42, 0x5b, 0x85, 0x65, 0xb9, 0x51,
-	0xd1, 0x9a, 0x55, 0x2d, 0x6c, 0x06, 0x21, 0x28, 0xd6, 0xca, 0xf4, 0xc6, 0x82, 0xd2, 0xd0, 0x5a,
-	0xe5, 0x06, 0xb1, 0x2a, 0xd1, 0xba, 0xac, 0xd6, 0x94, 0x28, 0x35, 0x29, 0x59, 0x00, 0xe3, 0xd2,
-	0x53, 0xfa, 0xfc, 0x2d, 0x16, 0x95, 0xf7, 0xe5, 0x46, 0x87, 0xde, 0xdb, 0x16, 0xe2, 0xe8, 0x12,
-	0xac, 0xf0, 0x43, 0x3a, 0xa5, 0xf1, 0x8c, 0x11, 0x13, 0xe8, 0x3a, 0x7c, 0xd0, 0x7e, 0xdd, 0xd8,
-	0xd9, 0x55, 0x9b, 0x0d, 0xe5, 0x33, 0xb9, 0xa2, 0x4d, 0x8f, 0x48, 0x4a, 0xbf, 0x12, 0x20, 0xc3,
-	0xc3, 0x02, 0x52, 0x21, 0xa7, 0xf7, 0x7c, 0xec, 0x6a, 0xba, 0x65, 0xf1, 0x20, 0x79, 0x7f, 0xfe,
-	0xa8, 0x52, 0x2a, 0x13, 0xde, 0xb2, 0x65, 0xed, 0xc6, 0xd4, 0xac, 0xce, 0x7f, 0x47, 0x30, 0xed,
-	0x11, 0xcf, 0x0a, 0x16, 0xc7, 0xb4, 0x47, 0x63, 0x4c, 0x7b, 0x84, 0xf6, 0x00, 0x18, 0x26, 0xd6,
-	0xbb, 0x47, 0x3c, 0xad, 0x7f, 0xb0, 0x28, 0xa8, 0xac, 0x77, 0x8f, 0x76, 0x63, 0x2a, 0xd3, 0x8e,
-	0x3c, 0x20, 0x0b, 0x2e, 0x71, 0x58, 0xdb, 0xd0, 0x9c, 0x5e, 0xb0, 0xbe, 0x58, 0x78, 0xfd, 0xce,
-	0xc2, 0xf8, 0xb6, 0xd1, 0xec, 0xb1, 0x85, 0xb8, 0x1b, 0x53, 0x05, 0x7d, 0x8a, 0x86, 0x7c, 0xb8,
-	0xcc, 0xa4, 0x4d, 0x15, 0x4b, 0xbc, 0x3b, 0xf5, 0x74, 0x51, 0x79, 0xb3, 0x45, 0x91, 0x3e, 0x4b,
-	0x46, 0x5f, 0xc5, 0x41, 0x62, 0x62, 0xbd, 0x91, 0xdd, 0x3d, 0x72, 0x1d, 0xdb, 0xfc, 0x19, 0x36,
-	0x66, 0x74, 0x60, 0x07, 0x5a, 0xcf, 0x17, 0xd5, 0xa1, 0x1d, 0xc1, 0x9c, 0xd1, 0xe7, 0x9a, 0xfe,
-	0xf6, 0x21, 0xe8, 0x05, 0xa4, 0x75, 0xeb, 0x8d, 0x3e, 0xf2, 0xf8, 0x15, 0xc8, 0x8d, 0x45, 0xc4,
-	0x53, 0xc6, 0xdd, 0x98, 0xca, 0x21, 0x50, 0x03, 0x32, 0x06, 0xee, 0xe9, 0x43, 0xcb, 0xe7, 0x57,
-	0x54, 0x37, 0x17, 0x40, 0xab, 0x30, 0xce, 0xdd, 0x98, 0x1a, 0x80, 0xa0, 0xcf, 0xc7, 0xd5, 0x64,
-	0xd7, 0x19, 0xda, 0x3e, 0xbf, 0xa6, 0xfa, 0x68, 0x01, 0x54, 0x39, 0x68, 0x53, 0x0d, 0x6d, 0x3f,
-	0x52, 0x3e, 0xd2, 0x67, 0xb4, 0x0b, 0x29, 0x1b, 0x9f, 0x60, 0x97, 0xdf, 0x54, 0xbd, 0xb7, 0x00,
-	0x6e, 0x83, 0xf0, 0xed, 0xc6, 0x54, 0x06, 0x40, 0x56, 0x87, 0xe3, 0xb2, 0x33, 0x07, 0x6b, 0x44,
-	0x77, 0x87, 0xc5, 0x56, 0x47, 0xd3, 0xad, 0x32, 0x5e, 0xb2, 0x3a, 0x9c, 0xe0, 0x81, 0xcc, 0x8e,
-	0x8b, 0x07, 0x58, 0x0f, 0x2e, 0xbe, 0x2e, 0x32, 0x3b, 0x2a, 0x65, 0x24, 0xb3, 0xc3, 0x20, 0xc4,
-	0x57, 0x90, 0x0d, 0xa2, 0x05, 0xaa, 0x41, 0x9e, 0x5e, 0x38, 0xa4, 0x43, 0x83, 0x7a, 0x75, 0x91,
-	0x6c, 0x26, 0xca, 0x3e, 0x46, 0xb6, 0x47, 0xef, 0x19, 0xf9, 0x35, 0xe4, 0xc2, 0xc0, 0xf1, 0x9e,
-	0xa1, 0xff, 0x3e, 0x0e, 0xc2, 0x74, 0xd0, 0x40, 0x4d, 0x58, 0xc6, 0xba, 0x6b, 0x8d, 0xb4, 0x9e,
-	0xe9, 0x9a, 0xf6, 0x61, 0x70, 0xcb, 0x75, 0x11, 0x21, 0x05, 0x0a, 0x50, 0x65, 0xfc, 0xa8, 0x0e,
-	0x05, 0x92, 0xc4, 0x84, 0x78, 0x89, 0x85, 0xf1, 0xf2, 0x84, 0x9f, 0xc3, 0x89, 0xbf, 0x80, 0x4b,
-	0xa7, 0x04, 0x1e, 0x74, 0x04, 0x6b, 0x61, 0xf5, 0xae, 0xcd, 0x7c, 0x16, 0xf4, 0x70, 0xce, 0xc6,
-	0x2b, 0x65, 0x1f, 0x7f, 0x07, 0x72, 0xc9, 0x9f, 0xa1, 0x79, 0xe2, 0x0d, 0xb8, 0xf6, 0x8e, 0xa8,
-	0x23, 0xe6, 0x20, 0xc3, 0xd7, 0xb2, 0x78, 0x1f, 0x0a, 0xd1, 0x05, 0x88, 0x3e, 0x9c, 0x5e, 0xd0,
-	0xc4, 0xbc, 0xa9, 0xc9, 0x55, 0x29, 0x66, 0x20, 0x45, 0x57, 0x97, 0x98, 0x85, 0x34, 0x0b, 0x31,
-	0xe2, 0x9f, 0xc6, 0x21, 0x17, 0x2e, 0x11, 0xf4, 0x14, 0x96, 0xc2, 0xb6, 0xf2, 0x62, 0xb6, 0xa4,
-	0x7c, 0x24, 0x8d, 0x0f, 0x56, 0xea, 0xe2, 0xd3, 0x11, 0xb0, 0x8a, 0x1d, 0x48, 0xb3, 0x25, 0x86,
-	0x9e, 0x03, 0x8c, 0x1d, 0xeb, 0x1c, 0x5a, 0x45, 0xb8, 0xb7, 0x73, 0x61, 0x89, 0x21, 0xfd, 0x36,
-	0x11, 0xe9, 0xf1, 0x8c, 0xaf, 0x29, 0xb7, 0x21, 0x65, 0x60, 0x4b, 0x1f, 0x71, 0x41, 0xdf, 0x39,
-	0xd7, 0xe4, 0x96, 0x2a, 0x04, 0x82, 0xc4, 0x2f, 0x8a, 0x85, 0x3e, 0x83, 0xac, 0x6e, 0x99, 0x87,
-	0xb6, 0xe6, 0x3b, 0xdc, 0x26, 0xdf, 0x3b, 0x1f, 0x6e, 0x99, 0xa0, 0x74, 0x1c, 0x12, 0xc5, 0x75,
-	0xf6, 0x53, 0xfc, 0x18, 0x52, 0x54, 0x1a, 0xba, 0x01, 0x05, 0x2a, 0x4d, 0xeb, 0x9b, 0x96, 0x65,
-	0x7a, 0xbc, 0xaf, 0x96, 0xa7, 0xb4, 0x3a, 0x25, 0x89, 0x4f, 0x20, 0xc3, 0x11, 0xd0, 0x15, 0x48,
-	0x0f, 0xb0, 0x6b, 0x3a, 0xac, 0x16, 0x4b, 0xaa, 0xfc, 0x89, 0xd0, 0x9d, 0x5e, 0xcf, 0xc3, 0x3e,
-	0x4d, 0x12, 0x92, 0x2a, 0x7f, 0xda, 0xbe, 0x0c, 0x97, 0x4e, 0x59, 0x03, 0xd2, 0x9f, 0x24, 0x20,
-	0x17, 0xb6, 0x3b, 0xd0, 0x3e, 0x14, 0xf5, 0x2e, 0xbd, 0x27, 0x35, 0xd0, 0x7d, 0x1f, 0xbb, 0xf6,
-	0x79, 0x2f, 0x73, 0x2f, 0x33, 0x98, 0x16, 0x43, 0x41, 0x2f, 0x20, 0x73, 0x62, 0xe2, 0x37, 0x17,
-	0x3b, 0xe0, 0x49, 0x13, 0x88, 0xaa, 0x8d, 0x3e, 0x07, 0x7e, 0xd3, 0x5f, 0xeb, 0xeb, 0x83, 0x01,
-	0xc9, 0x0f, 0x7a, 0x36, 0xcf, 0xb8, 0xce, 0x03, 0xcb, 0x6b, 0xdb, 0x3a, 0xc3, 0xaa, 0xda, 0xd2,
-	0x0b, 0xc8, 0x47, 0xee, 0x06, 0x21, 0x01, 0x92, 0x43, 0xd7, 0x0a, 0x3a, 0x4a, 0x43, 0xd7, 0x62,
-	0x14, 0x9b, 0xb7, 0xdd, 0xc9, 0x4f, 0xb4, 0x0e, 0x99, 0xe8, 0x07, 0x39, 0x05, 0x35, 0x78, 0x94,
-	0xfe, 0x3c, 0x0e, 0x6b, 0x41, 0xd3, 0x26, 0xfa, 0x5d, 0x93, 0xf4, 0x65, 0x1c, 0x0a, 0x51, 0x02,
-	0xba, 0x09, 0xe9, 0x4a, 0x93, 0x9e, 0xbb, 0xc6, 0xc4, 0x75, 0xda, 0x54, 0x40, 0xb4, 0xa9, 0x80,
-	0xed, 0x93, 0x2d, 0xc3, 0xe9, 0x1e, 0xb3, 0x46, 0xc9, 0x2d, 0xc8, 0xf0, 0x84, 0x59, 0x88, 0x4f,
-	0x34, 0x54, 0xc8, 0x30, 0x9e, 0x32, 0x91, 0x71, 0xb7, 0x21, 0x2b, 0xbf, 0xea, 0xc8, 0x6a, 0xa3,
-	0x5c, 0x9b, 0x6a, 0xe6, 0x90, 0x81, 0xf8, 0x0b, 0x32, 0x2d, 0xba, 0xb5, 0x75, 0xb2, 0x21, 0x3d,
-	0x86, 0xe5, 0x0a, 0x85, 0x0f, 0x1a, 0x99, 0x1f, 0xc1, 0x4a, 0xd7, 0xb1, 0x7d, 0xdd, 0xb4, 0x49,
-	0xad, 0xdf, 0xd7, 0x0f, 0x83, 0x5b, 0x68, 0xc5, 0x90, 0xac, 0x10, 0xaa, 0xf4, 0xef, 0x71, 0x28,
-	0xf2, 0xe0, 0x16, 0xf0, 0x16, 0x21, 0xe1, 0x78, 0x7c, 0x78, 0xc2, 0xf1, 0x10, 0x82, 0x25, 0xdd,
-	0xed, 0x1e, 0x71, 0x5b, 0xd1, 0xdf, 0xc4, 0x58, 0x5d, 0xa7, 0xdf, 0xd7, 0xed, 0xa0, 0x8d, 0x10,
-	0x3c, 0xa2, 0x1a, 0x24, 0xb1, 0x7d, 0xb2, 0xc8, 0xfd, 0xfb, 0x09, 0xe9, 0x25, 0xd9, 0x3e, 0x61,
-	0x4d, 0x42, 0x02, 0x23, 0x7e, 0x0a, 0xd9, 0x80, 0xb0, 0xd0, 0x4d, 0xf7, 0x9f, 0xc3, 0xca, 0x94,
-	0x8f, 0xbc, 0x9f, 0x4f, 0x1b, 0xbe, 0x09, 0xc5, 0xc8, 0x35, 0xb3, 0xf1, 0xc1, 0xcd, 0x72, 0x84,
-	0xaa, 0x18, 0xd2, 0x16, 0x14, 0x26, 0x64, 0x73, 0x6f, 0x8b, 0xcf, 0xe3, 0x6d, 0xff, 0xb3, 0x04,
-	0xf9, 0xc8, 0x25, 0x3a, 0xa4, 0x40, 0xca, 0xf4, 0x71, 0xb8, 0xd3, 0xdd, 0x5f, 0xec, 0x0e, 0x5e,
-	0x49, 0xf1, 0x71, 0x5f, 0x65, 0x08, 0x62, 0x0f, 0x40, 0x31, 0xb0, 0xed, 0x9b, 0x3d, 0x13, 0xbb,
-	0xf3, 0x5c, 0x56, 0xfa, 0x10, 0x96, 0xc7, 0x43, 0xc6, 0xeb, 0x65, 0xcc, 0xb7, 0xe7, 0xda, 0xc1,
-	0xbc, 0x24, 0xc3, 0x79, 0x11, 0x7f, 0x9d, 0x80, 0x25, 0x22, 0x17, 0x29, 0x90, 0xe0, 0xc0, 0xf3,
-	0x7d, 0xdf, 0x31, 0xa1, 0x78, 0xa8, 0xa9, 0x9a, 0x30, 0x89, 0x5f, 0xb1, 0xeb, 0x16, 0x89, 0xb9,
-	0xbb, 0x48, 0x51, 0xb0, 0xa9, 0x0b, 0x17, 0xe8, 0xe3, 0xc0, 0x73, 0x58, 0xcc, 0x59, 0x2b, 0xb1,
-	0x0f, 0xac, 0x4b, 0xc1, 0x07, 0xd6, 0xa5, 0xb2, 0x1d, 0x7c, 0x36, 0x89, 0x1e, 0x42, 0xde, 0x3b,
-	0x72, 0x5c, 0x9f, 0xf5, 0x02, 0x79, 0xdd, 0x76, 0x3a, 0x07, 0xd0, 0x81, 0xf4, 0xe8, 0x9e, 0x38,
-	0xa7, 0xa5, 0x1f, 0x60, 0x8b, 0x7f, 0x65, 0xc3, 0x1e, 0xd0, 0x55, 0xc8, 0x5a, 0xa6, 0x7d, 0xac,
-	0x91, 0x70, 0x94, 0x66, 0x2b, 0x87, 0x3c, 0xef, 0xb9, 0x96, 0xf8, 0x73, 0x7e, 0x09, 0x64, 0xf8,
-	0x96, 0x4b, 0x20, 0xed, 0x8e, 0xca, 0x1a, 0x1d, 0x79, 0xc8, 0x28, 0x8d, 0x8e, 0xfc, 0x4c, 0x56,
-	0x85, 0x04, 0xca, 0x41, 0xaa, 0x5a, 0x6b, 0x96, 0x3b, 0x42, 0x92, 0x1d, 0xf3, 0x36, 0x6b, 0x72,
-	0xb9, 0x21, 0x2c, 0xa1, 0x65, 0xc8, 0x85, 0x5f, 0x5f, 0x0b, 0x29, 0x54, 0x80, 0x6c, 0x65, 0x4f,
-	0x2d, 0xd3, 0xcb, 0xbf, 0x69, 0x52, 0xe8, 0x3f, 0x2f, 0xef, 0x97, 0xb5, 0x9d, 0x5a, 0xb9, 0xdd,
-	0x16, 0x32, 0x5b, 0xdf, 0x87, 0x2c, 0xfd, 0x74, 0x9d, 0x78, 0xe7, 0x8d, 0x99, 0xb7, 0x23, 0x1a,
-	0xd1, 0xf7, 0x6a, 0x0e, 0xd8, 0xd7, 0xd2, 0xff, 0xf2, 0x97, 0x7f, 0xf3, 0x8a, 0xe9, 0x4f, 0xb8,
-	0xf6, 0x5c, 0x7b, 0x4b, 0x81, 0x65, 0x0a, 0xd0, 0xe5, 0x1f, 0x9d, 0xcf, 0x83, 0xf2, 0xaf, 0x01,
-	0x4a, 0xe1, 0x20, 0xf2, 0xf1, 0xfa, 0xf6, 0x77, 0xe0, 0xdd, 0xdf, 0xcb, 0x6f, 0xe7, 0x54, 0x7a,
-	0x74, 0x51, 0x1e, 0x98, 0x9f, 0xe5, 0x03, 0xba, 0x76, 0xb2, 0x71, 0x90, 0xa6, 0xe2, 0xee, 0xff,
-	0x5f, 0x00, 0x00, 0x00, 0xff, 0xff, 0x0a, 0x0a, 0xb3, 0xe2, 0x8a, 0x3f, 0x00, 0x00,
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the grpc package it is being compiled against.
+const _ = grpc.SupportPackageIsVersion4
+
+// TestStreamServiceClient is the client API for TestStreamService service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
+type TestStreamServiceClient interface {
+	// A TestStream will request for events using this RPC.
+	Events(ctx context.Context, in *EventsRequest, opts ...grpc.CallOption) (TestStreamService_EventsClient, error)
+}
+
+type testStreamServiceClient struct {
+	cc *grpc.ClientConn
+}
+
+func NewTestStreamServiceClient(cc *grpc.ClientConn) TestStreamServiceClient {
+	return &testStreamServiceClient{cc}
+}
+
+func (c *testStreamServiceClient) Events(ctx context.Context, in *EventsRequest, opts ...grpc.CallOption) (TestStreamService_EventsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &_TestStreamService_serviceDesc.Streams[0], "/org.apache.beam.model.pipeline.v1.TestStreamService/Events", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &testStreamServiceEventsClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type TestStreamService_EventsClient interface {
+	Recv() (*TestStreamPayload_Event, error)
+	grpc.ClientStream
+}
+
+type testStreamServiceEventsClient struct {
+	grpc.ClientStream
+}
+
+func (x *testStreamServiceEventsClient) Recv() (*TestStreamPayload_Event, error) {
+	m := new(TestStreamPayload_Event)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+// TestStreamServiceServer is the server API for TestStreamService service.
+type TestStreamServiceServer interface {
+	// A TestStream will request for events using this RPC.
+	Events(*EventsRequest, TestStreamService_EventsServer) error
+}
+
+func RegisterTestStreamServiceServer(s *grpc.Server, srv TestStreamServiceServer) {
+	s.RegisterService(&_TestStreamService_serviceDesc, srv)
+}
+
+func _TestStreamService_Events_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(EventsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(TestStreamServiceServer).Events(m, &testStreamServiceEventsServer{stream})
+}
+
+type TestStreamService_EventsServer interface {
+	Send(*TestStreamPayload_Event) error
+	grpc.ServerStream
+}
+
+type testStreamServiceEventsServer struct {
+	grpc.ServerStream
+}
+
+func (x *testStreamServiceEventsServer) Send(m *TestStreamPayload_Event) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+var _TestStreamService_serviceDesc = grpc.ServiceDesc{
+	ServiceName: "org.apache.beam.model.pipeline.v1.TestStreamService",
+	HandlerType: (*TestStreamServiceServer)(nil),
+	Methods:     []grpc.MethodDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "Events",
+			Handler:       _TestStreamService_Events_Handler,
+			ServerStreams: true,
+		},
+	},
+	Metadata: "beam_runner_api.proto",
+}
+
+func init() {
+	proto.RegisterFile("beam_runner_api.proto", fileDescriptor_beam_runner_api_70c7dbd5f3375954)
+}
+
+var fileDescriptor_beam_runner_api_70c7dbd5f3375954 = []byte{
+	// 5205 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x7c, 0xdb, 0x6f, 0x23, 0xc9,
+	0x75, 0x37, 0x2f, 0xe2, 0xed, 0x90, 0xa2, 0x5a, 0x25, 0xcd, 0xac, 0xb6, 0xbd, 0xde, 0x99, 0xed,
+	0x5d, 0xef, 0x8e, 0xf7, 0x5b, 0x73, 0x47, 0x9a, 0x99, 0x9d, 0x19, 0xd9, 0x9e, 0x35, 0x29, 0x36,
+	0x47, 0x3d, 0xc3, 0x9b, 0x9b, 0x94, 0x34, 0xb3, 0xb6, 0xb7, 0xdd, 0x62, 0x17, 0xa5, 0x86, 0x9a,
+	0xdd, 0x74, 0x77, 0x53, 0xb3, 0x34, 0x6c, 0x7c, 0x40, 0x10, 0x18, 0x41, 0x02, 0xe4, 0xf2, 0x90,
+	0x00, 0x7e, 0x08, 0x02, 0xd8, 0x40, 0x80, 0x24, 0x0f, 0x09, 0xe2, 0x24, 0x40, 0x5e, 0x9d, 0xe4,
+	0x31, 0x0f, 0x01, 0xf2, 0x94, 0x3f, 0x23, 0x81, 0x1f, 0x92, 0xa7, 0xa0, 0x2e, 0xdd, 0x6c, 0x52,
+	0xd2, 0x2c, 0x29, 0x09, 0x79, 0x63, 0x9f, 0xae, 0xf3, 0x3b, 0x55, 0xa7, 0xaa, 0x4e, 0x9d, 0x73,
+	0xea, 0x34, 0xe1, 0xc6, 0x21, 0xd6, 0x07, 0x9a, 0x3b, 0xb2, 0x6d, 0xec, 0x6a, 0xfa, 0xd0, 0x2c,
+	0x0d, 0x5d, 0xc7, 0x77, 0xd0, 0x3b, 0x8e, 0x7b, 0x54, 0xd2, 0x87, 0x7a, 0xef, 0x18, 0x97, 0x48,
+	0x8b, 0xd2, 0xc0, 0x31, 0xb0, 0x55, 0x1a, 0x9a, 0x43, 0x6c, 0x99, 0x36, 0x2e, 0x9d, 0x6e, 0x8a,
+	0x2b, 0xd8, 0x36, 0x86, 0x8e, 0x69, 0xfb, 0x1e, 0xe3, 0x11, 0xdf, 0x3c, 0x72, 0x9c, 0x23, 0x0b,
+	0x7f, 0x4c, 0x9f, 0x0e, 0x47, 0xfd, 0x8f, 0x75, 0x7b, 0xcc, 0x5f, 0xdd, 0x9e, 0x7d, 0x65, 0x60,
+	0xaf, 0xe7, 0x9a, 0x43, 0xdf, 0x71, 0x79, 0x8b, 0x5b, 0xb3, 0x2d, 0x7c, 0x73, 0x80, 0x3d, 0x5f,
+	0x1f, 0x0c, 0x59, 0x03, 0xe9, 0xd7, 0x71, 0x58, 0xae, 0x60, 0x7d, 0xb0, 0xe3, 0xd8, 0x9e, 0xaf,
+	0xdb, 0xbe, 0x27, 0xfd, 0x4d, 0x1c, 0x72, 0xe1, 0x13, 0xda, 0x84, 0xf5, 0x86, 0xd2, 0xd4, 0xba,
+	0x4a, 0x43, 0xee, 0x74, 0xcb, 0x8d, 0xb6, 0xd6, 0x50, 0xea, 0x75, 0xa5, 0x23, 0xc4, 0xc4, 0x37,
+	0xfe, 0xf2, 0xef, 0xfe, 0xe7, 0xd7, 0xa9, 0xd5, 0x6f, 0x3c, 0xde, 0xda, 0xba, 0x77, 0xef, 0xe1,
+	0xd6, 0xdd, 0x7b, 0x9f, 0x3c, 0x7a, 0x70, 0xff, 0xe1, 0xc3, 0x07, 0xe8, 0x2e, 0xac, 0x37, 0xca,
+	0x2f, 0xce, 0xb2, 0xc4, 0xc5, 0x9b, 0x94, 0x45, 0x38, 0xc3, 0xf1, 0x04, 0xa4, 0xa7, 0xf5, 0x56,
+	0xa5, 0x5c, 0xd7, 0x0e, 0x94, 0x66, 0xb5, 0x75, 0xa0, 0x9d, 0xcb, 0x9f, 0x98, 0xe6, 0xdf, 0x7c,
+	0xfc, 0xe0, 0xee, 0x7d, 0xca, 0x2f, 0xfd, 0x43, 0x16, 0x60, 0xc7, 0x19, 0x0c, 0x1d, 0x1b, 0x93,
+	0x3e, 0xff, 0x00, 0xc0, 0x77, 0x75, 0xdb, 0xeb, 0x3b, 0xee, 0xc0, 0xdb, 0x88, 0xdf, 0x4e, 0xde,
+	0xc9, 0x6f, 0x7d, 0xbb, 0xf4, 0xa5, 0xaa, 0x2f, 0x4d, 0x20, 0x4a, 0xdd, 0x90, 0x5f, 0xb6, 0x7d,
+	0x77, 0xac, 0x46, 0x00, 0x51, 0x0f, 0x0a, 0xc3, 0x9e, 0x63, 0x59, 0xb8, 0xe7, 0x9b, 0x8e, 0xed,
+	0x6d, 0x24, 0xa8, 0x80, 0x4f, 0x17, 0x13, 0xd0, 0x8e, 0x20, 0x30, 0x11, 0x53, 0xa0, 0x68, 0x0c,
+	0xeb, 0xaf, 0x4c, 0xdb, 0x70, 0x5e, 0x99, 0xf6, 0x91, 0xe6, 0xf9, 0xae, 0xee, 0xe3, 0x23, 0x13,
+	0x7b, 0x1b, 0x49, 0x2a, 0xac, 0xb6, 0x98, 0xb0, 0x83, 0x00, 0xa9, 0x13, 0x02, 0x31, 0x99, 0x6b,
+	0xaf, 0xce, 0xbe, 0x41, 0xdf, 0x85, 0x74, 0xcf, 0x31, 0xb0, 0xeb, 0x6d, 0x2c, 0x51, 0x61, 0x8f,
+	0x17, 0x13, 0xb6, 0x43, 0x79, 0x19, 0x3e, 0x07, 0x22, 0x2a, 0xc3, 0xf6, 0xa9, 0xe9, 0x3a, 0xf6,
+	0x80, 0xb4, 0xd9, 0x48, 0x5d, 0x46, 0x65, 0x72, 0x04, 0x81, 0xab, 0x2c, 0x0a, 0x2a, 0x5a, 0xb0,
+	0x32, 0x33, 0x6d, 0x48, 0x80, 0xe4, 0x09, 0x1e, 0x6f, 0xc4, 0x6f, 0xc7, 0xef, 0xe4, 0x54, 0xf2,
+	0x13, 0xed, 0x40, 0xea, 0x54, 0xb7, 0x46, 0x78, 0x23, 0x71, 0x3b, 0x7e, 0x27, 0xbf, 0xf5, 0x8d,
+	0x39, 0xba, 0xd0, 0x0e, 0x51, 0x55, 0xc6, 0xbb, 0x9d, 0x78, 0x14, 0x17, 0x1d, 0x58, 0x3d, 0x33,
+	0x87, 0xe7, 0xc8, 0xab, 0x4e, 0xcb, 0x2b, 0xcd, 0x23, 0x6f, 0x27, 0x84, 0x8d, 0x0a, 0xfc, 0x09,
+	0x6c, 0x5c, 0x34, 0x8f, 0xe7, 0xc8, 0x7d, 0x36, 0x2d, 0xf7, 0xfe, 0x1c, 0x72, 0x67, 0xd1, 0xc7,
+	0x51, 0xe9, 0x3d, 0xc8, 0x47, 0x26, 0xf6, 0x1c, 0x81, 0x4f, 0xa6, 0x05, 0xde, 0x99, 0x6b, 0x6e,
+	0x0d, 0xec, 0xce, 0xe8, 0xf4, 0xcc, 0x24, 0x5f, 0x8f, 0x4e, 0x23, 0xb0, 0x11, 0x81, 0xd2, 0x7f,
+	0xc4, 0x21, 0xdb, 0xe6, 0xcd, 0x50, 0x03, 0xa0, 0x17, 0xae, 0x36, 0x2a, 0x6f, 0xbe, 0xf5, 0x31,
+	0x59, 0xa2, 0x6a, 0x04, 0x00, 0x7d, 0x04, 0xc8, 0x75, 0x1c, 0x5f, 0x0b, 0x2d, 0x87, 0x66, 0x1a,
+	0xcc, 0x58, 0xe4, 0x54, 0x81, 0xbc, 0x09, 0x97, 0x95, 0x62, 0x90, 0x4d, 0x57, 0x30, 0x4c, 0x6f,
+	0x68, 0xe9, 0x63, 0xcd, 0xd0, 0x7d, 0x7d, 0x23, 0x39, 0xf7, 0xd0, 0xaa, 0x8c, 0xad, 0xaa, 0xfb,
+	0xba, 0x9a, 0x37, 0x26, 0x0f, 0xd2, 0xef, 0x2d, 0x01, 0x4c, 0xd6, 0x2e, 0xba, 0x05, 0xf9, 0x91,
+	0x6d, 0xfe, 0x68, 0x84, 0x35, 0x5b, 0x1f, 0xe0, 0x8d, 0x14, 0xd5, 0x27, 0x30, 0x52, 0x53, 0x1f,
+	0x60, 0xb4, 0x03, 0x4b, 0xde, 0x10, 0xf7, 0xf8, 0xc8, 0x3f, 0x9e, 0x43, 0x74, 0x6d, 0x64, 0xd3,
+	0x65, 0xda, 0x19, 0xe2, 0x9e, 0x4a, 0x99, 0xd1, 0x7b, 0xb0, 0xec, 0x8d, 0x0e, 0x23, 0xe6, 0x97,
+	0x0d, 0x78, 0x9a, 0x48, 0x4c, 0x8c, 0x69, 0x0f, 0x47, 0x7e, 0x60, 0xcf, 0x1e, 0x2f, 0xb4, 0x0d,
+	0x4b, 0x0a, 0xe5, 0xe5, 0x26, 0x86, 0x01, 0xa1, 0x2e, 0x64, 0x9c, 0x91, 0x4f, 0x31, 0x99, 0xd9,
+	0xda, 0x5e, 0x0c, 0xb3, 0xc5, 0x98, 0x19, 0x68, 0x00, 0x75, 0x66, 0x5a, 0xd2, 0x57, 0x9e, 0x16,
+	0xf1, 0x31, 0xe4, 0x23, 0xfd, 0x3f, 0x67, 0x79, 0xaf, 0x47, 0x97, 0x77, 0x2e, 0xba, 0x3f, 0xb6,
+	0xa1, 0x10, 0xed, 0xe6, 0x22, 0xbc, 0xd2, 0xdf, 0x2f, 0xc3, 0x5a, 0xc7, 0xd7, 0x6d, 0x43, 0x77,
+	0x8d, 0xc9, 0xb0, 0x3d, 0xe9, 0x2f, 0x92, 0x00, 0x6d, 0xd7, 0x1c, 0x98, 0xbe, 0x79, 0x8a, 0x3d,
+	0xf4, 0x75, 0x48, 0xb7, 0xcb, 0xaa, 0x56, 0x6d, 0x09, 0x31, 0xf1, 0xab, 0xbf, 0x20, 0xc7, 0xed,
+	0x1b, 0x64, 0x80, 0xdb, 0xe1, 0xe4, 0x6d, 0x0f, 0x75, 0xd7, 0x70, 0xb6, 0x4f, 0x37, 0xd1, 0x47,
+	0x90, 0xa9, 0xd5, 0xcb, 0xdd, 0xae, 0xdc, 0x14, 0xe2, 0xe2, 0x2d, 0xda, 0xf6, 0xcd, 0x99, 0xb6,
+	0x7d, 0x4b, 0xf7, 0x7d, 0x6c, 0x93, 0xd6, 0x9f, 0x40, 0xe1, 0xa9, 0xda, 0xda, 0x6b, 0x6b, 0x95,
+	0x97, 0xda, 0x73, 0xf9, 0xa5, 0x90, 0x10, 0xdf, 0xa3, 0x2c, 0x6f, 0xcf, 0xb0, 0x1c, 0xb9, 0xce,
+	0x68, 0xa8, 0x1d, 0x8e, 0xb5, 0x13, 0x3c, 0xe6, 0x52, 0x94, 0x46, 0x7b, 0xaf, 0xde, 0x91, 0x85,
+	0xe4, 0x05, 0x52, 0xcc, 0xc1, 0x70, 0x64, 0x79, 0x98, 0xb4, 0x7e, 0x08, 0xc5, 0x72, 0xa7, 0xa3,
+	0x3c, 0x6d, 0x72, 0x4f, 0xa2, 0x23, 0x2c, 0x89, 0xef, 0x52, 0xa6, 0xaf, 0xce, 0x30, 0xb1, 0x93,
+	0x4f, 0x33, 0x6d, 0x9f, 0x0e, 0xe6, 0x1e, 0xe4, 0xbb, 0x72, 0xa7, 0xab, 0x75, 0xba, 0xaa, 0x5c,
+	0x6e, 0x08, 0x29, 0x51, 0xa2, 0x5c, 0x6f, 0xcd, 0x70, 0xf9, 0xd8, 0xf3, 0x3d, 0xdf, 0x25, 0xc4,
+	0xd3, 0x4d, 0x74, 0x1f, 0xf2, 0x8d, 0x72, 0x3b, 0x14, 0x95, 0xbe, 0x40, 0xd4, 0x40, 0x1f, 0x6a,
+	0x4c, 0x9c, 0x47, 0xb8, 0x1e, 0xc1, 0x72, 0x43, 0x56, 0x9f, 0xca, 0x21, 0x5f, 0x46, 0xfc, 0x1a,
+	0xe5, 0xbb, 0x35, 0xcb, 0x87, 0xdd, 0x23, 0x1c, 0xe1, 0x94, 0x7c, 0x58, 0xaf, 0xe2, 0xa1, 0x8b,
+	0x7b, 0xba, 0x8f, 0x8d, 0xc8, 0xa4, 0xbd, 0x0f, 0x4b, 0xaa, 0x5c, 0xae, 0x0a, 0x31, 0xf1, 0x2d,
+	0x0a, 0x74, 0x73, 0x06, 0xc8, 0xc5, 0xba, 0xc1, 0xfb, 0xbb, 0xa3, 0xca, 0xe5, 0xae, 0xac, 0xed,
+	0x2b, 0xf2, 0x81, 0x10, 0xbf, 0xa0, 0xbf, 0x3d, 0x17, 0xeb, 0x3e, 0xd6, 0x4e, 0x4d, 0xfc, 0x8a,
+	0x48, 0xfd, 0xcf, 0x38, 0xf7, 0xae, 0x3c, 0xd3, 0xc7, 0x1e, 0xfa, 0x16, 0xac, 0xec, 0xb4, 0x1a,
+	0x15, 0xa5, 0x29, 0x6b, 0x6d, 0x59, 0xa5, 0x73, 0x19, 0x13, 0x3f, 0xa0, 0x40, 0xef, 0xcc, 0x02,
+	0x39, 0x83, 0x43, 0xd3, 0xc6, 0xda, 0x10, 0xbb, 0xc1, 0x74, 0x3e, 0x01, 0x21, 0xe0, 0x66, 0x2e,
+	0x5f, 0xfd, 0xa5, 0x10, 0x17, 0xef, 0x50, 0x76, 0xe9, 0x02, 0xf6, 0x23, 0xcb, 0x39, 0xd4, 0x2d,
+	0x8b, 0xf2, 0xdf, 0x85, 0x9c, 0x2a, 0x77, 0x76, 0xf7, 0x6a, 0xb5, 0xba, 0x2c, 0x24, 0xc4, 0x77,
+	0x28, 0xe3, 0x57, 0xce, 0x8c, 0xd7, 0x3b, 0x1e, 0xf5, 0xfb, 0x16, 0xe6, 0x83, 0x3e, 0x50, 0x95,
+	0xae, 0xac, 0xd5, 0x94, 0xba, 0xdc, 0x11, 0x92, 0x17, 0xad, 0x07, 0xd7, 0xf4, 0xb1, 0xd6, 0x37,
+	0x2d, 0x4c, 0x55, 0xfd, 0x9b, 0x04, 0xac, 0xee, 0x30, 0xf9, 0x11, 0xcf, 0x52, 0x05, 0x71, 0x66,
+	0xec, 0x5a, 0x5b, 0x95, 0x39, 0x49, 0x88, 0x89, 0x5b, 0x14, 0xfa, 0xa3, 0xd7, 0xab, 0x41, 0x23,
+	0x33, 0xc8, 0x48, 0xa4, 0x7f, 0x87, 0x20, 0xcd, 0x62, 0xb2, 0xe5, 0x51, 0xde, 0xd9, 0xd9, 0x6b,
+	0xec, 0xd5, 0xcb, 0xdd, 0x96, 0x4a, 0x9c, 0xe7, 0x6d, 0x8a, 0x7d, 0xff, 0x4b, 0xb0, 0xd9, 0x9a,
+	0xd1, 0x7b, 0xbd, 0xd1, 0x60, 0x64, 0xe9, 0xbe, 0xe3, 0xd2, 0x25, 0xf7, 0x7d, 0xb8, 0x35, 0x2b,
+	0x43, 0x7e, 0xd1, 0x55, 0xcb, 0x3b, 0x5d, 0xad, 0xb5, 0xd7, 0x6d, 0xef, 0x75, 0x89, 0x77, 0xfd,
+	0x90, 0x0a, 0xd8, 0xfc, 0x12, 0x01, 0xf8, 0x0b, 0xdf, 0xd5, 0x7b, 0xbe, 0xc6, 0x2d, 0x24, 0x41,
+	0x7f, 0x06, 0x37, 0xc3, 0x39, 0x25, 0x5b, 0x5c, 0xae, 0x6a, 0xfb, 0xe5, 0xfa, 0x1e, 0x55, 0x76,
+	0x89, 0x82, 0xde, 0xb9, 0x68, 0x66, 0xc9, 0x66, 0xc7, 0x86, 0x46, 0xcd, 0x14, 0xd5, 0xfb, 0xef,
+	0x2f, 0xc1, 0x9b, 0x9d, 0xa1, 0x65, 0xfa, 0xbe, 0x7e, 0x68, 0xe1, 0xb6, 0xee, 0x56, 0x9d, 0x88,
+	0xfe, 0xeb, 0x70, 0xa3, 0x5d, 0x56, 0x54, 0xed, 0x40, 0xe9, 0xee, 0x6a, 0xaa, 0xdc, 0xe9, 0xaa,
+	0xca, 0x4e, 0x57, 0x69, 0x35, 0x85, 0x98, 0xb8, 0x49, 0x05, 0xfd, 0xbf, 0x19, 0x41, 0x9e, 0xd1,
+	0xd7, 0x86, 0xba, 0xe9, 0x6a, 0xaf, 0x4c, 0xff, 0x58, 0x73, 0xb1, 0xe7, 0xbb, 0x26, 0x3d, 0xb2,
+	0x48, 0xbf, 0xab, 0xb0, 0xda, 0x69, 0xd7, 0x95, 0xee, 0x14, 0x52, 0x5c, 0xfc, 0x06, 0x45, 0xfa,
+	0xe0, 0x1c, 0x24, 0x8f, 0x74, 0x6c, 0x16, 0xa5, 0x09, 0x37, 0xdb, 0x6a, 0x6b, 0x47, 0xee, 0x74,
+	0x88, 0x5e, 0xe5, 0xaa, 0x26, 0xd7, 0xe5, 0x86, 0xdc, 0xa4, 0x2a, 0x3d, 0x7f, 0x3d, 0xd0, 0x4e,
+	0xb9, 0x4e, 0x0f, 0x7b, 0x1e, 0x51, 0x29, 0x36, 0x34, 0x6c, 0x61, 0xea, 0xf1, 0x10, 0xbc, 0x0a,
+	0x08, 0x01, 0x5e, 0x88, 0x94, 0x14, 0x3f, 0xa2, 0x48, 0xef, 0xbf, 0x06, 0x29, 0x8a, 0xf1, 0x02,
+	0xbe, 0xc2, 0x46, 0x56, 0x6e, 0x56, 0xb5, 0x8e, 0xf2, 0x99, 0x1c, 0x1d, 0x22, 0xb1, 0x89, 0xe7,
+	0xcf, 0xf5, 0x64, 0x8c, 0xba, 0x6d, 0x68, 0x9e, 0xf9, 0x63, 0x1c, 0x1d, 0x2c, 0x45, 0x76, 0xe0,
+	0x83, 0xa0, 0x77, 0x04, 0x77, 0x32, 0x5a, 0x2a, 0x6a, 0x4a, 0x4a, 0x4a, 0xac, 0x50, 0x29, 0xdf,
+	0x7a, 0x4d, 0xa7, 0x89, 0x8c, 0x70, 0xf8, 0x54, 0xea, 0x8c, 0x40, 0xe9, 0xb7, 0xe2, 0x70, 0x33,
+	0x38, 0xb7, 0x3a, 0xa6, 0x81, 0xe9, 0xd9, 0xd9, 0x1d, 0x0f, 0xb1, 0x27, 0x1d, 0xc3, 0x92, 0x6c,
+	0x8f, 0x06, 0xe8, 0x63, 0xc8, 0x2a, 0x5d, 0x59, 0x2d, 0x57, 0xea, 0x64, 0x0f, 0x46, 0x4d, 0x82,
+	0x67, 0x1a, 0x58, 0xa3, 0x0e, 0xc2, 0xb6, 0xe9, 0x63, 0x97, 0x2c, 0x29, 0x32, 0x88, 0x8f, 0x21,
+	0xdb, 0xd8, 0xab, 0x77, 0x95, 0x46, 0xb9, 0x2d, 0xc4, 0x2f, 0x62, 0x18, 0x8c, 0x2c, 0xdf, 0x1c,
+	0xe8, 0x43, 0xd2, 0x89, 0x5f, 0x24, 0x20, 0x1f, 0x71, 0xcb, 0x67, 0x7d, 0xa9, 0xf8, 0x19, 0x5f,
+	0xea, 0x4d, 0xc8, 0xd2, 0xd0, 0x47, 0x33, 0x0d, 0x7e, 0x14, 0x67, 0xe8, 0xb3, 0x62, 0xa0, 0x36,
+	0x80, 0xe9, 0x69, 0x87, 0xce, 0xc8, 0x36, 0xb0, 0x41, 0xfd, 0xbc, 0xe2, 0xd6, 0xe6, 0x1c, 0x0e,
+	0x85, 0xe2, 0x55, 0x18, 0x4f, 0x89, 0x0c, 0x5a, 0xcd, 0x99, 0xc1, 0x33, 0xda, 0x82, 0x1b, 0x67,
+	0x62, 0xc5, 0x31, 0x91, 0xbc, 0x44, 0x25, 0x9f, 0x09, 0xf2, 0xc6, 0x8a, 0x71, 0xc6, 0xb1, 0x49,
+	0x5d, 0xdd, 0xdf, 0xfc, 0x79, 0x06, 0x0a, 0x74, 0xc3, 0xb6, 0xf5, 0xb1, 0xe5, 0xe8, 0x06, 0x7a,
+	0x0a, 0x29, 0xc3, 0xd1, 0xfa, 0x36, 0xf7, 0x28, 0xb7, 0xe6, 0x00, 0xef, 0x18, 0x27, 0xd3, 0x4e,
+	0xa5, 0xe1, 0xd4, 0x6c, 0x54, 0x07, 0x18, 0xea, 0xae, 0x3e, 0xc0, 0x3e, 0x89, 0x4a, 0x59, 0xbc,
+	0xfd, 0xd1, 0x3c, 0xee, 0x5d, 0xc0, 0xa4, 0x46, 0xf8, 0xd1, 0x0f, 0x21, 0x3f, 0x99, 0xe6, 0xc0,
+	0x03, 0xfd, 0x74, 0x3e, 0xb8, 0x70, 0x70, 0xa5, 0x70, 0x2d, 0x06, 0x19, 0x02, 0x2f, 0x24, 0x50,
+	0x09, 0x3e, 0x39, 0x42, 0x89, 0x4b, 0x1c, 0xf8, 0xa3, 0x8b, 0x4b, 0x20, 0x10, 0x44, 0x0b, 0xa1,
+	0x84, 0x90, 0x40, 0x24, 0xf8, 0xe6, 0x00, 0xbb, 0x5c, 0x42, 0xea, 0x72, 0x12, 0xba, 0x04, 0x22,
+	0x2a, 0xc1, 0x0f, 0x09, 0xe8, 0x6d, 0x00, 0x2f, 0xb4, 0xc3, 0xd4, 0xef, 0xcd, 0xaa, 0x11, 0x0a,
+	0xba, 0x0b, 0xeb, 0x91, 0xad, 0xaa, 0x85, 0xab, 0x3d, 0x43, 0xd7, 0x1c, 0x8a, 0xbc, 0xdb, 0xe1,
+	0x0b, 0xff, 0x1e, 0xdc, 0x70, 0xf1, 0x8f, 0x46, 0xc4, 0x83, 0xd2, 0xfa, 0xa6, 0xad, 0x5b, 0xe6,
+	0x8f, 0x75, 0xf2, 0x7e, 0x23, 0x4b, 0xc1, 0xd7, 0x83, 0x97, 0xb5, 0xc8, 0x3b, 0xf1, 0x04, 0x56,
+	0x66, 0x34, 0x7d, 0x8e, 0xd7, 0x5b, 0x99, 0x0e, 0x08, 0xe7, 0x59, 0x1a, 0x21, 0x68, 0xd4, 0xbf,
+	0x26, 0xc2, 0xa6, 0x95, 0x7e, 0x4d, 0xc2, 0x02, 0xd0, 0x19, 0x61, 0x33, 0xfa, 0xbf, 0x1e, 0x61,
+	0x21, 0x68, 0xd4, 0xfb, 0xff, 0x55, 0x1c, 0x72, 0xe1, 0x6e, 0x40, 0xcf, 0x60, 0xc9, 0x1f, 0x0f,
+	0x99, 0xdd, 0x2a, 0x6e, 0x7d, 0xb2, 0xc8, 0x4e, 0x2a, 0x11, 0xd3, 0xcb, 0x2c, 0x10, 0xc5, 0x10,
+	0x3f, 0x83, 0x25, 0x42, 0x92, 0x54, 0x6e, 0x8c, 0x57, 0x20, 0xbf, 0xd7, 0xec, 0xb4, 0xe5, 0x1d,
+	0xa5, 0xa6, 0xc8, 0x55, 0x21, 0x86, 0x00, 0xd2, 0xcc, 0xd1, 0x15, 0xe2, 0x68, 0x1d, 0x84, 0xb6,
+	0xd2, 0x96, 0xeb, 0xc4, 0x55, 0x68, 0xb5, 0xd9, 0x31, 0x91, 0x40, 0x6f, 0xc0, 0x5a, 0xe4, 0xe0,
+	0xd0, 0x88, 0x5f, 0xf2, 0x5c, 0x56, 0x85, 0xa4, 0xf4, 0x6f, 0x49, 0xc8, 0x85, 0xba, 0x43, 0x2e,
+	0xdc, 0x24, 0x8e, 0xac, 0x36, 0x70, 0x0c, 0xb3, 0x3f, 0xd6, 0x98, 0xc3, 0x16, 0x89, 0x58, 0xbf,
+	0x39, 0xc7, 0x38, 0x54, 0xac, 0x1b, 0x0d, 0xca, 0x7f, 0x40, 0xd8, 0x43, 0xf0, 0xdd, 0x98, 0xba,
+	0xe6, 0xce, 0xbc, 0x23, 0x32, 0xeb, 0x90, 0x3d, 0xd4, 0x8f, 0x98, 0x94, 0xc4, 0xdc, 0x71, 0x71,
+	0x45, 0x3f, 0x8a, 0x22, 0x67, 0x0e, 0xf5, 0x23, 0x8a, 0xf6, 0x39, 0x14, 0x99, 0xe7, 0x43, 0x0d,
+	0x35, 0xc1, 0x64, 0x61, 0xfe, 0x83, 0xf9, 0xb2, 0x0c, 0x8c, 0x31, 0x8a, 0xbc, 0x1c, 0xc2, 0x05,
+	0xbd, 0x25, 0xb1, 0x06, 0x45, 0x5e, 0x9a, 0xbb, 0xb7, 0x0d, 0x7d, 0x38, 0xd5, 0xdb, 0x81, 0x3e,
+	0x0c, 0xd0, 0x3c, 0xec, 0x33, 0xb4, 0xd4, 0xdc, 0x68, 0x1d, 0xec, 0x4f, 0xa1, 0x79, 0xd8, 0x27,
+	0x3f, 0x2b, 0x69, 0x96, 0x5d, 0x90, 0x1e, 0xc0, 0xc6, 0x45, 0x93, 0x30, 0x75, 0x6a, 0xc6, 0xa7,
+	0x4e, 0x4d, 0xe9, 0x11, 0x14, 0xa2, 0x5a, 0x45, 0x77, 0x40, 0x08, 0xbc, 0x86, 0x19, 0x96, 0x22,
+	0xa7, 0x73, 0xb3, 0x23, 0xfd, 0x3c, 0x0e, 0xe8, 0xac, 0xf2, 0x88, 0xfd, 0x8a, 0x78, 0xc9, 0xb3,
+	0x20, 0x28, 0xf2, 0x2e, 0xb0, 0x5f, 0xdf, 0xa5, 0xf9, 0x21, 0xea, 0xb7, 0xf6, 0x6d, 0xbe, 0x1a,
+	0x2e, 0x73, 0xa6, 0xe5, 0x38, 0x4a, 0xcd, 0x96, 0xf6, 0xa1, 0x10, 0xd5, 0x3e, 0xba, 0x0d, 0x05,
+	0xe2, 0x63, 0xcf, 0x74, 0x06, 0x4e, 0xf0, 0x38, 0xe8, 0xc4, 0x7b, 0x50, 0xa4, 0xbb, 0x5a, 0x9b,
+	0x71, 0x2f, 0x0a, 0x94, 0xba, 0x33, 0xd1, 0x56, 0x74, 0x1e, 0x16, 0xd0, 0xd6, 0xcf, 0xe2, 0x90,
+	0x0b, 0x2d, 0x08, 0xea, 0xb0, 0x63, 0x46, 0x33, 0x9c, 0x81, 0x6e, 0xda, 0xdc, 0x5e, 0x6c, 0xcd,
+	0x69, 0x84, 0xaa, 0x94, 0x89, 0xd9, 0x0a, 0x7a, 0xb2, 0x30, 0x02, 0x19, 0x02, 0x3b, 0xbb, 0x66,
+	0x87, 0x40, 0xa9, 0x41, 0x47, 0xbe, 0x03, 0xb9, 0xd0, 0xe3, 0x91, 0xee, 0x5d, 0x64, 0x5c, 0x96,
+	0x21, 0xb7, 0xd7, 0xac, 0xb4, 0xf6, 0x9a, 0x55, 0xb9, 0x2a, 0xc4, 0x51, 0x1e, 0x32, 0xc1, 0x43,
+	0x42, 0xfa, 0xab, 0x38, 0xe4, 0xc9, 0x52, 0x0b, 0xdc, 0x91, 0x67, 0x90, 0xf6, 0x9c, 0x91, 0xdb,
+	0xc3, 0x57, 0xf0, 0x47, 0x38, 0xc2, 0x8c, 0x13, 0x97, 0xb8, 0xba, 0x13, 0x27, 0x19, 0xb0, 0xca,
+	0x12, 0xb0, 0x8a, 0xed, 0x87, 0x1e, 0x54, 0x0b, 0x72, 0x3c, 0x4f, 0x71, 0x25, 0x2f, 0x2a, 0xcb,
+	0x40, 0x6a, 0xb6, 0xf4, 0xc7, 0x71, 0x28, 0xf2, 0xb0, 0x36, 0x90, 0x31, 0xbd, 0xac, 0xe3, 0xd7,
+	0xb0, 0xac, 0x2f, 0xdc, 0x5b, 0x89, 0x8b, 0xf6, 0x96, 0xf4, 0xaf, 0x19, 0x58, 0xed, 0x62, 0xcf,
+	0xef, 0xd0, 0xdc, 0x4a, 0xd0, 0xb5, 0x8b, 0xed, 0x01, 0x52, 0x21, 0x8d, 0x4f, 0x69, 0xa2, 0x36,
+	0x31, 0x77, 0xb6, 0xef, 0x8c, 0x80, 0x92, 0x4c, 0x20, 0x54, 0x8e, 0x84, 0x3a, 0x90, 0x0d, 0x2e,
+	0xdf, 0xb8, 0x61, 0x7e, 0x38, 0x07, 0x6a, 0x79, 0x68, 0x76, 0xb0, 0x7b, 0x6a, 0xf6, 0x70, 0x35,
+	0xbc, 0x7d, 0x53, 0x43, 0x20, 0xf1, 0x4f, 0x52, 0x90, 0xa2, 0x62, 0xd0, 0x29, 0xac, 0xbc, 0xd2,
+	0x7d, 0xec, 0x0e, 0x74, 0xf7, 0x44, 0xa3, 0x22, 0xb9, 0xb6, 0x9f, 0x5f, 0xbe, 0xef, 0xa5, 0xb2,
+	0x71, 0xaa, 0xdb, 0x3d, 0x7c, 0x10, 0x00, 0xef, 0xc6, 0xd4, 0x62, 0x28, 0x85, 0xc9, 0xfd, 0x59,
+	0x1c, 0x6e, 0xf0, 0x78, 0x8b, 0x9c, 0x3b, 0x74, 0x43, 0x33, 0xf1, 0xcc, 0x86, 0xb5, 0xaf, 0x2e,
+	0xbe, 0x1d, 0xc2, 0x93, 0x8d, 0x4f, 0x0e, 0xd3, 0xe1, 0x14, 0x85, 0x75, 0x64, 0x00, 0xcb, 0x81,
+	0x15, 0x62, 0xf2, 0x99, 0x92, 0x6b, 0x57, 0x92, 0x6f, 0xc8, 0x3c, 0xee, 0xdd, 0x8d, 0xa9, 0x05,
+	0x0e, 0x4f, 0xdf, 0x89, 0x0a, 0x08, 0xb3, 0xda, 0x41, 0xef, 0xc2, 0xb2, 0x8d, 0x5f, 0x69, 0xa1,
+	0x86, 0xe8, 0x0c, 0x24, 0xd5, 0x82, 0x8d, 0x5f, 0x4d, 0x1a, 0x09, 0x90, 0xf4, 0xf5, 0x23, 0xbe,
+	0x5a, 0xc9, 0x4f, 0xb1, 0x02, 0x37, 0xce, 0x1d, 0x29, 0xfa, 0x3a, 0x08, 0x3a, 0x7b, 0xa1, 0x19,
+	0x23, 0x97, 0xb9, 0xb3, 0x0c, 0x72, 0x85, 0xd3, 0xab, 0x9c, 0x2c, 0xfe, 0x76, 0x1c, 0xf2, 0x91,
+	0xee, 0xa2, 0x1e, 0x64, 0x83, 0x90, 0x9d, 0xdf, 0x51, 0x3e, 0xbd, 0x94, 0x22, 0xba, 0xc1, 0x8d,
+	0x2e, 0x0e, 0xb0, 0xd5, 0x10, 0x38, 0x18, 0x4a, 0x32, 0x1c, 0x4a, 0x25, 0x03, 0x29, 0xaa, 0x7c,
+	0xf1, 0x7b, 0x80, 0xce, 0xb2, 0xa2, 0x0f, 0x60, 0x05, 0xdb, 0x64, 0x93, 0x85, 0x51, 0x39, 0x1d,
+	0x4f, 0x41, 0x2d, 0x72, 0x72, 0xd0, 0xf0, 0x2d, 0xc8, 0x85, 0x77, 0xc9, 0x54, 0x55, 0x49, 0x75,
+	0x42, 0x90, 0x56, 0x60, 0x99, 0x4e, 0x82, 0xa7, 0x32, 0xa7, 0x5e, 0xfa, 0xaf, 0x24, 0xac, 0xd2,
+	0xd3, 0xbe, 0x66, 0x5a, 0xd8, 0x0b, 0x36, 0x78, 0x0d, 0x96, 0x3c, 0xd3, 0x3e, 0xb9, 0x4a, 0x80,
+	0x48, 0xf8, 0xd1, 0xf7, 0x60, 0xa5, 0xef, 0xb8, 0x03, 0xdd, 0xd7, 0xfa, 0xfc, 0xe5, 0x15, 0xce,
+	0xe7, 0x22, 0x83, 0x0a, 0x68, 0x44, 0x25, 0xcc, 0x7e, 0x62, 0x83, 0x39, 0x9d, 0x1e, 0xd5, 0x67,
+	0x56, 0x2d, 0x06, 0x64, 0x3a, 0x30, 0x0f, 0x7d, 0x0b, 0x44, 0x7e, 0xe3, 0x6f, 0x10, 0x57, 0x79,
+	0x60, 0xda, 0xd8, 0xd0, 0xbc, 0x63, 0xdd, 0x35, 0x4c, 0xfb, 0x88, 0x3a, 0x64, 0x59, 0x75, 0x83,
+	0xb5, 0xa8, 0x86, 0x0d, 0x3a, 0xfc, 0x3d, 0xc2, 0xd3, 0x61, 0x29, 0x0b, 0xe9, 0xaa, 0xf3, 0xdc,
+	0xdb, 0xcd, 0xaa, 0xf5, 0x75, 0xb1, 0xe9, 0xff, 0x69, 0x40, 0x25, 0xfd, 0x04, 0x52, 0xd4, 0xc2,
+	0x5f, 0xcf, 0xdd, 0x52, 0x09, 0xd6, 0xc2, 0xfb, 0xb5, 0xf0, 0x50, 0x09, 0x6e, 0x98, 0x56, 0xc3,
+	0x57, 0xfc, 0x4c, 0xf1, 0xa4, 0x3f, 0x4d, 0x41, 0x31, 0x48, 0x1d, 0xb1, 0xcb, 0x4b, 0xe9, 0x77,
+	0x53, 0xdc, 0x93, 0x78, 0x0f, 0x52, 0x95, 0x97, 0x5d, 0xb9, 0x23, 0xc4, 0xc4, 0x37, 0x69, 0xfe,
+	0x67, 0x8d, 0xe6, 0x7f, 0x28, 0xea, 0xf6, 0xe1, 0xd8, 0xa7, 0xd9, 0x48, 0x74, 0x17, 0xf2, 0x24,
+	0x2e, 0x69, 0x3e, 0xd5, 0xf6, 0xba, 0xb5, 0x47, 0x02, 0x4c, 0x5d, 0x40, 0xb0, 0xb6, 0x24, 0xcc,
+	0xb5, 0x8f, 0xb4, 0x91, 0xdf, 0x7f, 0x44, 0x38, 0xde, 0x86, 0xc4, 0xf3, 0x7d, 0x21, 0x2e, 0xde,
+	0xa4, 0x0d, 0x85, 0x48, 0xc3, 0x93, 0x53, 0xf2, 0x5e, 0x82, 0xa5, 0x4a, 0xab, 0x55, 0x17, 0x0a,
+	0xe2, 0x06, 0x6d, 0x81, 0xa2, 0x62, 0x1d, 0xc7, 0x22, 0x6d, 0xde, 0x87, 0xf4, 0x7e, 0x59, 0x55,
+	0x9a, 0x5d, 0x21, 0x21, 0x8a, 0xb4, 0xd5, 0x7a, 0xa4, 0xd5, 0xa9, 0xee, 0x9a, 0xb6, 0xcf, 0xdb,
+	0x55, 0x5b, 0x7b, 0x95, 0xba, 0x2c, 0xe4, 0xcf, 0x69, 0x67, 0x38, 0x23, 0x9e, 0xee, 0xfa, 0x30,
+	0x92, 0x1f, 0x4b, 0x4e, 0x5d, 0x11, 0xb0, 0x96, 0xd1, 0xd4, 0xd8, 0x7b, 0x90, 0xea, 0x2a, 0x0d,
+	0x59, 0x15, 0x96, 0xce, 0xd1, 0x0b, 0x75, 0xd0, 0xd8, 0x15, 0xc6, 0x8a, 0xd2, 0xec, 0xca, 0xea,
+	0x7e, 0x58, 0xb2, 0x21, 0xa4, 0xa6, 0xf2, 0xea, 0x1c, 0xd8, 0xf6, 0xb1, 0x7b, 0xaa, 0x5b, 0xfc,
+	0x0e, 0x83, 0x65, 0xe3, 0x97, 0xeb, 0x72, 0xf3, 0x69, 0x77, 0x57, 0x6b, 0xab, 0x72, 0x4d, 0x79,
+	0x21, 0xa4, 0xa7, 0xf2, 0x6f, 0x8c, 0xcf, 0xc2, 0xf6, 0x91, 0x7f, 0xac, 0x0d, 0x5d, 0xdc, 0x37,
+	0xbf, 0xe0, 0x5c, 0x53, 0x05, 0x22, 0x42, 0xe6, 0x1c, 0x2e, 0x76, 0x4d, 0x10, 0x91, 0xf5, 0x09,
+	0x14, 0x59, 0xf3, 0x20, 0x21, 0x2d, 0x64, 0xa7, 0xae, 0x75, 0x18, 0x5b, 0xb8, 0xb7, 0xd9, 0xb2,
+	0xa5, 0x79, 0xe1, 0x1b, 0x9d, 0x6e, 0xb9, 0x2b, 0x6b, 0x15, 0x12, 0x88, 0x56, 0xb5, 0x50, 0x79,
+	0x39, 0xf1, 0xeb, 0x94, 0xfd, 0xdd, 0xa9, 0xf9, 0xd7, 0x7d, 0xac, 0x1d, 0xea, 0xbd, 0x13, 0x6c,
+	0x68, 0x51, 0x4d, 0xde, 0x86, 0xa4, 0xda, 0x3a, 0x10, 0x96, 0xc5, 0x37, 0x28, 0xcf, 0x6a, 0x84,
+	0xc7, 0xa5, 0xfd, 0x93, 0x7e, 0x27, 0x1d, 0xf8, 0x7c, 0x91, 0xdc, 0xdc, 0xb5, 0xfb, 0x7c, 0x68,
+	0x1f, 0x0a, 0xec, 0x56, 0x80, 0x74, 0x75, 0xe4, 0x71, 0x6f, 0xf5, 0xde, 0x3c, 0x91, 0x21, 0x61,
+	0xeb, 0x50, 0x2e, 0xe6, 0xaf, 0xe6, 0x07, 0x13, 0x0a, 0x7a, 0x3f, 0xb0, 0x8b, 0x13, 0x07, 0x8f,
+	0x9d, 0x33, 0xcb, 0x8c, 0x1c, 0x84, 0x2c, 0x55, 0xc8, 0xf8, 0xae, 0x79, 0x74, 0x84, 0x5d, 0x1e,
+	0x94, 0x7e, 0x38, 0xcf, 0x39, 0xc7, 0x38, 0xd4, 0x80, 0x15, 0x61, 0x58, 0x0d, 0xfd, 0x46, 0xd3,
+	0xb1, 0x35, 0xc2, 0x42, 0xc3, 0xd2, 0xe2, 0xd6, 0xa3, 0x79, 0xbc, 0xb4, 0x08, 0x6f, 0xc3, 0x31,
+	0x78, 0x0a, 0x43, 0xd0, 0x67, 0xc8, 0x24, 0xe2, 0x61, 0x37, 0x1b, 0xd4, 0x4f, 0xa2, 0x79, 0xaf,
+	0xf9, 0x22, 0x1e, 0x76, 0x31, 0x4b, 0x4e, 0x54, 0x1e, 0xf1, 0x38, 0x21, 0x01, 0x1d, 0x82, 0xd0,
+	0xb3, 0x1c, 0xea, 0x7d, 0x1d, 0xe2, 0x63, 0xfd, 0xd4, 0x74, 0x5c, 0x9a, 0x27, 0x2b, 0xce, 0xe5,
+	0x60, 0xee, 0x30, 0xd6, 0x0a, 0xe7, 0x64, 0xf0, 0x2b, 0xbd, 0x69, 0x2a, 0xf5, 0x44, 0x2c, 0x8b,
+	0x2e, 0x64, 0x4b, 0xf7, 0xb1, 0x8d, 0x3d, 0x8f, 0x26, 0xd6, 0x88, 0x27, 0xc2, 0xe8, 0x75, 0x4e,
+	0x46, 0x9f, 0x43, 0xb1, 0x65, 0x93, 0x8e, 0x05, 0xcc, 0x1b, 0xb9, 0xb9, 0x13, 0x41, 0xd3, 0x8c,
+	0xac, 0x2f, 0x33, 0x68, 0x68, 0x13, 0x6e, 0xe8, 0x9e, 0x67, 0x1e, 0xd9, 0x9e, 0xe6, 0x3b, 0x9a,
+	0x63, 0x07, 0x77, 0x98, 0x1b, 0x40, 0x8f, 0x40, 0xc4, 0x5f, 0x76, 0x9d, 0x96, 0x8d, 0xd9, 0xfa,
+	0x97, 0xbe, 0x0f, 0xf9, 0xc8, 0x62, 0x93, 0x1a, 0x17, 0xc5, 0x7b, 0x2b, 0x90, 0x6f, 0xb6, 0x9a,
+	0xf4, 0x82, 0x4c, 0x69, 0x3e, 0x15, 0xe2, 0x94, 0x20, 0xcb, 0xd5, 0x0e, 0xbb, 0x33, 0x13, 0x12,
+	0x08, 0x41, 0xb1, 0x5c, 0x57, 0xe5, 0x72, 0x95, 0x5f, 0xa3, 0x55, 0x85, 0xa4, 0xf4, 0x03, 0x10,
+	0x66, 0xe7, 0x5f, 0x52, 0x2e, 0x12, 0x51, 0x04, 0xa8, 0x2a, 0x9d, 0x9d, 0xb2, 0x5a, 0x65, 0x12,
+	0x04, 0x28, 0x84, 0x37, 0x71, 0x84, 0x92, 0x20, 0x2d, 0x54, 0x99, 0xde, 0x9e, 0x91, 0xe7, 0xa4,
+	0xf4, 0x5d, 0x58, 0x99, 0x99, 0x23, 0xe9, 0xc9, 0x6b, 0x06, 0x20, 0x37, 0x94, 0xae, 0x56, 0xae,
+	0x1f, 0x94, 0x5f, 0x76, 0x58, 0x4a, 0x8c, 0x12, 0x94, 0x9a, 0xd6, 0x6c, 0x35, 0xe5, 0x46, 0xbb,
+	0xfb, 0x52, 0x48, 0x48, 0xed, 0xd9, 0x29, 0x7a, 0x2d, 0x62, 0x4d, 0x51, 0xe5, 0x29, 0x44, 0x4a,
+	0x98, 0x46, 0x3c, 0x04, 0x98, 0x2c, 0x51, 0xa9, 0x7b, 0x11, 0xda, 0x2a, 0x2c, 0xcb, 0xcd, 0xaa,
+	0xd6, 0xaa, 0x69, 0x61, 0xd2, 0x0e, 0x41, 0xb1, 0x5e, 0xa6, 0x97, 0xe3, 0x4a, 0x53, 0x6b, 0x97,
+	0x9b, 0x44, 0xcb, 0xa4, 0xd7, 0x65, 0xb5, 0xae, 0x44, 0xa9, 0x49, 0xc9, 0x02, 0x98, 0x04, 0xfe,
+	0xd2, 0xe7, 0xaf, 0xd1, 0xb0, 0xbc, 0x2f, 0x37, 0xbb, 0xb4, 0xc4, 0x4f, 0x88, 0xa3, 0x35, 0x58,
+	0xe1, 0x77, 0x4a, 0xe4, 0xa4, 0xa5, 0xc4, 0x04, 0xba, 0x0d, 0x6f, 0x75, 0x5e, 0x36, 0x77, 0x76,
+	0xd5, 0x56, 0x93, 0xde, 0x33, 0xcd, 0xb6, 0x48, 0x4a, 0xbf, 0x14, 0x20, 0xc3, 0xcd, 0x04, 0x52,
+	0x21, 0xa7, 0xf7, 0x7d, 0xec, 0x6a, 0xba, 0x65, 0x71, 0xa3, 0x79, 0x6f, 0x7e, 0x2b, 0x53, 0x2a,
+	0x13, 0xde, 0xb2, 0x65, 0xed, 0xc6, 0xd4, 0xac, 0xce, 0x7f, 0x47, 0x30, 0xed, 0x31, 0x77, 0x84,
+	0x16, 0xc7, 0xb4, 0xc7, 0x13, 0x4c, 0x7b, 0x8c, 0xf6, 0x00, 0x18, 0x26, 0xd6, 0x7b, 0xc7, 0x3c,
+	0xfe, 0xb9, 0xbf, 0x28, 0xa8, 0xac, 0xf7, 0x8e, 0x77, 0x63, 0x2a, 0xeb, 0x1d, 0x79, 0x40, 0x16,
+	0xac, 0x71, 0x58, 0xdb, 0xd0, 0x9c, 0x7e, 0xb0, 0xdf, 0x96, 0xe6, 0xce, 0x8b, 0x4e, 0xe3, 0xdb,
+	0x46, 0xab, 0xcf, 0x36, 0xe6, 0x6e, 0x4c, 0x15, 0xf4, 0x19, 0x1a, 0xf2, 0xe1, 0x06, 0x93, 0x36,
+	0x13, 0x55, 0xf2, 0x2c, 0xe1, 0x93, 0x45, 0xe5, 0x9d, 0x8d, 0x1e, 0xf5, 0xb3, 0x64, 0xf4, 0xf3,
+	0x38, 0x48, 0x4c, 0xac, 0x37, 0xb6, 0x7b, 0xc7, 0xae, 0x63, 0xd3, 0xbb, 0xc3, 0xd9, 0x3e, 0xb0,
+	0x0a, 0x9d, 0x67, 0x8b, 0xf6, 0xa1, 0x13, 0xc1, 0x3c, 0xd3, 0x9f, 0x5b, 0xfa, 0xeb, 0x9b, 0xa0,
+	0xe7, 0x90, 0xd6, 0xad, 0x57, 0xfa, 0xd8, 0xdb, 0x28, 0x50, 0xf1, 0x9b, 0x8b, 0x88, 0xa7, 0x8c,
+	0xbb, 0x31, 0x95, 0x43, 0xa0, 0x26, 0x64, 0x0c, 0xdc, 0xd7, 0x47, 0x96, 0x4f, 0x0f, 0x89, 0xf9,
+	0x8e, 0xff, 0x00, 0xad, 0xca, 0x38, 0x77, 0x63, 0x6a, 0x00, 0x82, 0x3e, 0x9f, 0x84, 0xdd, 0x3d,
+	0x67, 0x64, 0xfb, 0xf4, 0x58, 0x98, 0x2f, 0xb7, 0x11, 0xa0, 0xca, 0x41, 0x92, 0x70, 0x64, 0xfb,
+	0x91, 0x38, 0x9b, 0x3e, 0xa3, 0x5d, 0x48, 0xd9, 0xf8, 0x14, 0xb3, 0x53, 0x24, 0xbf, 0x75, 0x77,
+	0x01, 0xdc, 0x26, 0xe1, 0xdb, 0x8d, 0xa9, 0x0c, 0x80, 0xec, 0x0e, 0xc7, 0x65, 0x77, 0x43, 0xd6,
+	0x98, 0x9e, 0x16, 0x8b, 0xed, 0x8e, 0x96, 0x5b, 0x63, 0xbc, 0x64, 0x77, 0x38, 0xc1, 0x03, 0x99,
+	0x1d, 0x17, 0x0f, 0xb1, 0xee, 0x6f, 0xe4, 0x17, 0x9e, 0x1d, 0x95, 0x32, 0x92, 0xd9, 0x61, 0x10,
+	0xe2, 0x0b, 0xc8, 0x06, 0xd6, 0x02, 0xd5, 0x21, 0x4f, 0xeb, 0xda, 0x68, 0xd3, 0x20, 0x8a, 0x5f,
+	0xc4, 0xbb, 0x89, 0xb2, 0x4f, 0x90, 0xed, 0xf1, 0x35, 0x23, 0xbf, 0x84, 0x5c, 0x68, 0x38, 0xae,
+	0x19, 0xfa, 0x6f, 0xe3, 0x20, 0xcc, 0x1a, 0x0d, 0xd4, 0x82, 0x65, 0xac, 0xbb, 0xd6, 0x58, 0xeb,
+	0x9b, 0x24, 0x38, 0x0a, 0x8a, 0x29, 0x17, 0x11, 0x52, 0xa0, 0x00, 0x35, 0xc6, 0x8f, 0x1a, 0x50,
+	0x20, 0x4e, 0x4d, 0x88, 0x97, 0x58, 0x18, 0x2f, 0x4f, 0xf8, 0x39, 0x9c, 0xf8, 0xff, 0x61, 0xed,
+	0x1c, 0xc3, 0x83, 0x8e, 0x61, 0x3d, 0xcc, 0x60, 0x68, 0x67, 0x2a, 0xc8, 0x1f, 0xcc, 0x99, 0xf6,
+	0xa6, 0xec, 0x93, 0x92, 0xe1, 0x35, 0xff, 0x0c, 0xcd, 0x13, 0xdf, 0x81, 0x5b, 0x5f, 0x62, 0x75,
+	0xc4, 0x1c, 0x64, 0xf8, 0x5e, 0x16, 0xef, 0x41, 0x21, 0xba, 0x01, 0xd1, 0xbb, 0xb3, 0x1b, 0x9a,
+	0xa8, 0x37, 0x35, 0xbd, 0x2b, 0xc5, 0x0c, 0xa4, 0xe8, 0xee, 0x12, 0xb3, 0x90, 0x66, 0x26, 0x46,
+	0xfc, 0xa3, 0x38, 0xe4, 0xc2, 0x2d, 0x82, 0x9e, 0xc0, 0x52, 0x98, 0xd4, 0x5f, 0x4c, 0x97, 0x94,
+	0x8f, 0xb8, 0xf5, 0xc1, 0x4e, 0x5d, 0x7c, 0x3a, 0x02, 0x56, 0xb1, 0x0b, 0x69, 0xb6, 0xc5, 0xd0,
+	0x33, 0x80, 0xc9, 0xc2, 0xba, 0x44, 0xaf, 0x22, 0xdc, 0x95, 0x5c, 0x18, 0x72, 0x48, 0xff, 0x94,
+	0x88, 0xe4, 0xb9, 0x26, 0xd5, 0xb0, 0x1d, 0x48, 0x19, 0xd8, 0xd2, 0xc7, 0x0b, 0xdc, 0x1d, 0x9e,
+	0x45, 0x29, 0x55, 0x09, 0x04, 0xb1, 0x5f, 0x14, 0x0b, 0x7d, 0x06, 0x59, 0xdd, 0x32, 0x8f, 0x6c,
+	0xcd, 0x77, 0xb8, 0x4e, 0xbe, 0x7d, 0x39, 0xdc, 0x32, 0x41, 0xe9, 0x3a, 0xc4, 0x8a, 0xeb, 0xec,
+	0xa7, 0xf8, 0x21, 0xa4, 0xa8, 0x34, 0xf4, 0x0e, 0x14, 0xa8, 0x34, 0x6d, 0x60, 0x5a, 0x96, 0xe9,
+	0xf1, 0x74, 0x63, 0x9e, 0xd2, 0x1a, 0x94, 0x24, 0x3e, 0x86, 0x0c, 0x47, 0x40, 0x37, 0x21, 0x3d,
+	0xc4, 0xae, 0xe9, 0xb0, 0xd8, 0x2c, 0xa9, 0xf2, 0x27, 0x42, 0x77, 0xfa, 0x7d, 0x0f, 0xfb, 0xd4,
+	0x49, 0x48, 0xaa, 0xfc, 0xa9, 0x72, 0x03, 0xd6, 0xce, 0xd9, 0x03, 0xd2, 0x1f, 0x26, 0x20, 0x17,
+	0x66, 0x78, 0xd0, 0x3e, 0x14, 0xf5, 0x1e, 0xad, 0xdf, 0x19, 0xea, 0xbe, 0x8f, 0x5d, 0xfb, 0xb2,
+	0x79, 0x9d, 0x65, 0x06, 0xd3, 0x66, 0x28, 0xe8, 0x39, 0x64, 0x4e, 0x4d, 0xfc, 0xea, 0x6a, 0xd7,
+	0x6b, 0x69, 0x02, 0x51, 0xb3, 0xd1, 0xe7, 0xb0, 0xca, 0xc3, 0xd3, 0x81, 0x3e, 0x1c, 0x12, 0xff,
+	0xa0, 0x6f, 0x73, 0x8f, 0xeb, 0x32, 0xb0, 0x3c, 0xd6, 0x6d, 0x30, 0xac, 0x9a, 0x2d, 0x7d, 0x0a,
+	0xf9, 0x48, 0x55, 0x39, 0x12, 0x20, 0x39, 0x72, 0xed, 0x20, 0x69, 0x3c, 0x72, 0x6d, 0xb4, 0x01,
+	0x99, 0x21, 0x4b, 0xc8, 0x51, 0xb1, 0x05, 0x35, 0x78, 0x7c, 0xb6, 0x94, 0x8d, 0x0b, 0x09, 0xe9,
+	0xcf, 0xe2, 0xb0, 0x1e, 0xa4, 0xa7, 0xa2, 0x65, 0xef, 0xd2, 0xcf, 0xe2, 0x50, 0x88, 0x12, 0xd0,
+	0x7b, 0x90, 0xae, 0xb6, 0xe8, 0x9d, 0x78, 0x6c, 0x2a, 0x6d, 0x84, 0xed, 0xd3, 0x6d, 0xc3, 0xe9,
+	0x9d, 0xb0, 0xa4, 0xcc, 0xfb, 0x90, 0xe1, 0x4e, 0xb2, 0x10, 0x9f, 0x4a, 0xde, 0x90, 0x66, 0xdc,
+	0x4d, 0x22, 0xed, 0xee, 0x40, 0x56, 0x7e, 0xd1, 0x95, 0xd5, 0x66, 0xb9, 0x3e, 0x93, 0x60, 0x22,
+	0x0d, 0xf1, 0x17, 0x64, 0x2a, 0x74, 0x6b, 0xfb, 0x74, 0x53, 0x7a, 0x04, 0xcb, 0x55, 0x0a, 0x1f,
+	0xe4, 0x6b, 0x3f, 0x80, 0x95, 0x9e, 0x63, 0xfb, 0xba, 0x69, 0x93, 0x78, 0x7f, 0xa0, 0x1f, 0x05,
+	0xb5, 0x4f, 0xc5, 0x90, 0xac, 0x10, 0xaa, 0xf4, 0xef, 0x71, 0x28, 0x72, 0x83, 0x16, 0xf0, 0x16,
+	0x21, 0xe1, 0x78, 0xbc, 0x79, 0xc2, 0xf1, 0x10, 0x82, 0x25, 0xdd, 0xed, 0x1d, 0x73, 0x8d, 0xd1,
+	0xdf, 0x44, 0x65, 0x3d, 0x67, 0x30, 0xd0, 0xed, 0x20, 0x95, 0x10, 0x3c, 0xa2, 0x3a, 0x24, 0xb1,
+	0x7d, 0xba, 0x48, 0x69, 0xf7, 0x94, 0xf4, 0x92, 0x6c, 0x9f, 0xb2, 0x5c, 0x28, 0x81, 0x11, 0x3f,
+	0x81, 0x6c, 0x40, 0x58, 0xa8, 0x88, 0xfa, 0xbf, 0xe3, 0xb0, 0x22, 0x73, 0x05, 0x05, 0xe3, 0x8a,
+	0xde, 0x1a, 0xc5, 0xaf, 0xe9, 0xd6, 0x08, 0xed, 0x43, 0x9a, 0x56, 0x2c, 0x05, 0xd7, 0x5b, 0xf3,
+	0xf8, 0xd4, 0x33, 0x1d, 0x63, 0x35, 0x1b, 0x41, 0x95, 0x3c, 0x43, 0x13, 0x1f, 0x43, 0x3e, 0x42,
+	0x5e, 0x68, 0xec, 0x3f, 0x85, 0x95, 0x99, 0x3d, 0x71, 0x3d, 0x59, 0xdd, 0xaf, 0x41, 0x31, 0xf2,
+	0x19, 0xcf, 0xe4, 0x9a, 0x70, 0x39, 0x42, 0x55, 0x0c, 0x69, 0x1b, 0x0a, 0x53, 0xb2, 0xf9, 0x7e,
+	0x8b, 0xcf, 0xb1, 0xdf, 0xa4, 0xdf, 0x2c, 0x41, 0x3e, 0x52, 0xb6, 0x86, 0x14, 0x48, 0x99, 0x3e,
+	0x0e, 0x4f, 0xf6, 0x7b, 0x8b, 0x55, 0xbd, 0x95, 0x14, 0x1f, 0x0f, 0x54, 0x86, 0x20, 0xf6, 0x01,
+	0x14, 0x03, 0xdb, 0xbe, 0xd9, 0x37, 0xb1, 0x4b, 0x6c, 0x73, 0xf4, 0x73, 0x0f, 0xde, 0xbb, 0xbc,
+	0x3f, 0xf9, 0xd2, 0x83, 0x1c, 0xde, 0x93, 0x26, 0x13, 0x8b, 0x31, 0xe1, 0xdb, 0x73, 0xed, 0x60,
+	0x5e, 0x92, 0xe1, 0xbc, 0x88, 0xbf, 0x4a, 0xc0, 0x12, 0x91, 0x8b, 0x14, 0x48, 0x70, 0xe0, 0xf9,
+	0x3e, 0x9b, 0x98, 0xea, 0x78, 0xd8, 0x53, 0x35, 0x61, 0x92, 0x3d, 0xc5, 0xca, 0x80, 0x12, 0x73,
+	0x67, 0xd1, 0xa2, 0x60, 0x33, 0x85, 0x40, 0xe8, 0xc3, 0x60, 0xe5, 0x30, 0x1b, 0xbb, 0x5e, 0x62,
+	0x9f, 0x1e, 0x96, 0x82, 0x4f, 0x0f, 0x4b, 0x65, 0x3b, 0xf8, 0xa2, 0x08, 0x3d, 0x80, 0xbc, 0x77,
+	0xec, 0xb8, 0x3e, 0xcb, 0xb9, 0xf2, 0x38, 0xf5, 0x7c, 0x0e, 0xa0, 0x0d, 0xf7, 0x29, 0xdb, 0x3a,
+	0xa4, 0x2c, 0xfd, 0x10, 0x5b, 0xfc, 0xe3, 0x15, 0xf6, 0x80, 0xde, 0x84, 0xac, 0x65, 0xda, 0x27,
+	0xda, 0xc8, 0xb5, 0x68, 0xf4, 0x97, 0x53, 0x33, 0xe4, 0x79, 0xcf, 0xb5, 0xc4, 0x9f, 0xf2, 0xe2,
+	0xa4, 0xd1, 0x6b, 0x8a, 0x93, 0x58, 0x82, 0x9f, 0x15, 0x0f, 0x28, 0xcd, 0xae, 0xfc, 0x54, 0x56,
+	0x85, 0x04, 0xca, 0x41, 0xaa, 0x56, 0x6f, 0x95, 0xbb, 0x42, 0x92, 0x15, 0x15, 0xb4, 0xea, 0x72,
+	0xb9, 0x29, 0x2c, 0xa1, 0x65, 0xc8, 0x85, 0x1f, 0x26, 0x0a, 0x29, 0x54, 0x80, 0x6c, 0x75, 0x4f,
+	0x2d, 0xd3, 0xca, 0xe1, 0x34, 0x2a, 0x02, 0x3c, 0x2b, 0xef, 0x97, 0xb5, 0x9d, 0x7a, 0xb9, 0xd3,
+	0x11, 0x32, 0xd2, 0x3f, 0x66, 0xe1, 0x46, 0x03, 0x7b, 0x9e, 0x7e, 0x84, 0x0f, 0x4c, 0xff, 0x38,
+	0x52, 0xc8, 0x7c, 0xcd, 0xdf, 0x1a, 0x7d, 0x07, 0x52, 0x34, 0x07, 0xbb, 0xe8, 0xc7, 0x57, 0xc4,
+	0x75, 0xa1, 0x8c, 0xe8, 0xfb, 0xc4, 0xb2, 0xf3, 0x4a, 0xef, 0xc8, 0x26, 0x9a, 0x2f, 0x58, 0x9a,
+	0xae, 0x28, 0xd8, 0x8d, 0xa9, 0xbc, 0xcc, 0x29, 0xac, 0x31, 0xf8, 0x21, 0xac, 0x7a, 0xc6, 0x49,
+	0x78, 0x39, 0x17, 0xad, 0x50, 0xba, 0xc4, 0x59, 0xbc, 0x1b, 0x53, 0x57, 0xbc, 0x19, 0x53, 0x74,
+	0x00, 0xc5, 0xa1, 0xee, 0x6a, 0x86, 0x13, 0x76, 0x3f, 0x3d, 0xb7, 0x51, 0x8a, 0xd6, 0x44, 0x92,
+	0xe8, 0x76, 0x18, 0x2d, 0x62, 0x6d, 0x01, 0x0c, 0xc3, 0xbd, 0xc9, 0x03, 0xf2, 0xc5, 0xbe, 0x1a,
+	0xdc, 0x8d, 0xa9, 0x11, 0x08, 0xa4, 0x42, 0x3e, 0xf2, 0xa5, 0x27, 0x0f, 0xc6, 0x17, 0xfc, 0x2e,
+	0x70, 0x37, 0xa6, 0x46, 0x41, 0x50, 0x07, 0x0a, 0xb4, 0x34, 0x2e, 0x18, 0x7b, 0x6e, 0x6e, 0xd0,
+	0x48, 0x81, 0x0c, 0x01, 0x75, 0x23, 0xf5, 0x32, 0x0d, 0x80, 0xc9, 0x85, 0x24, 0x0f, 0x9d, 0x17,
+	0xba, 0x09, 0x24, 0x51, 0x78, 0x78, 0xf3, 0x88, 0xfa, 0xb0, 0x16, 0xf9, 0xe6, 0x26, 0xec, 0x6a,
+	0x61, 0xc1, 0xef, 0x13, 0x23, 0xe5, 0x31, 0xbb, 0x31, 0x95, 0xbb, 0x78, 0xd1, 0x9a, 0x19, 0x0c,
+	0xe8, 0x6c, 0x35, 0xf4, 0xc6, 0xf2, 0xe5, 0x3f, 0x83, 0x9c, 0x88, 0x89, 0x5e, 0xd3, 0xec, 0xc3,
+	0xf2, 0xf4, 0x72, 0x2e, 0x5e, 0xea, 0x10, 0x24, 0xeb, 0xad, 0x1f, 0x79, 0xae, 0xa4, 0x61, 0xc9,
+	0x75, 0x1c, 0x5f, 0xfa, 0x65, 0x1a, 0x6e, 0xca, 0x5f, 0xe0, 0xde, 0x88, 0x96, 0xdb, 0x76, 0x7c,
+	0xfd, 0x28, 0xdc, 0x4d, 0x6d, 0xc8, 0x47, 0xce, 0x46, 0x6e, 0x3d, 0x16, 0xfd, 0x0a, 0x32, 0x0a,
+	0x41, 0x0c, 0x2b, 0x9b, 0x65, 0x7e, 0xea, 0x9b, 0x7c, 0xc6, 0xce, 0x29, 0x94, 0x96, 0xe7, 0xf2,
+	0x44, 0xce, 0xeb, 0xf7, 0x64, 0x61, 0x28, 0xc6, 0x54, 0xb9, 0xf4, 0xdb, 0x53, 0xdf, 0x6b, 0x2f,
+	0xd1, 0xeb, 0xdc, 0xe8, 0x07, 0xd7, 0x1b, 0x93, 0x4f, 0xfb, 0x52, 0xf4, 0x65, 0xf8, 0x79, 0xde,
+	0xb4, 0x19, 0x4d, 0x5f, 0xd5, 0x8c, 0xf6, 0x21, 0x3f, 0xf2, 0xb0, 0x4b, 0x2f, 0xca, 0xb0, 0xb7,
+	0x91, 0xb9, 0xea, 0x80, 0xf7, 0x3c, 0xec, 0xd2, 0x22, 0x3c, 0x32, 0xe0, 0x51, 0xf0, 0xe0, 0xa1,
+	0x97, 0x90, 0xa6, 0x57, 0xa9, 0xde, 0x46, 0x96, 0x8a, 0x28, 0x5f, 0x5e, 0x04, 0xad, 0xd5, 0x53,
+	0x0c, 0x95, 0x03, 0x8a, 0x2d, 0xc8, 0x47, 0xd4, 0x3c, 0x8f, 0x43, 0xf2, 0x55, 0x00, 0xcb, 0xe9,
+	0xe9, 0x16, 0xfb, 0x94, 0x81, 0x2d, 0x80, 0x1c, 0xa5, 0x34, 0xf5, 0x01, 0x26, 0x80, 0x91, 0x61,
+	0x5c, 0x03, 0xe0, 0x73, 0xc8, 0xf0, 0x4e, 0x5f, 0x1d, 0x6c, 0xeb, 0x0f, 0xe2, 0xd1, 0xba, 0x31,
+	0xee, 0x51, 0xa3, 0x1f, 0x43, 0x9a, 0x55, 0x9f, 0xa0, 0x79, 0x92, 0x91, 0x53, 0x85, 0x2a, 0xe2,
+	0x15, 0x0a, 0xc9, 0xa4, 0xd8, 0xdd, 0xf8, 0xf6, 0xa7, 0x90, 0xa5, 0xff, 0xfd, 0x40, 0x3c, 0xd2,
+	0x77, 0xce, 0x78, 0x34, 0xc4, 0x0b, 0xa1, 0xbe, 0x4c, 0x6b, 0xc8, 0xfe, 0x3c, 0xe0, 0x9f, 0xff,
+	0xfc, 0xaf, 0x5f, 0x30, 0x9f, 0x85, 0x70, 0xed, 0xb9, 0xf6, 0xb6, 0x02, 0xcb, 0x14, 0xa0, 0xc7,
+	0xff, 0x83, 0x61, 0x1e, 0x94, 0x7f, 0x09, 0x50, 0x0a, 0x87, 0x91, 0xff, 0x72, 0xa8, 0x7c, 0x13,
+	0xbe, 0xfc, 0x0f, 0x27, 0x2a, 0x39, 0x95, 0x56, 0xa4, 0x94, 0x87, 0xe6, 0x67, 0xf9, 0x80, 0xae,
+	0x9d, 0x6e, 0x1e, 0xa6, 0xa9, 0xb8, 0x7b, 0xff, 0x1b, 0x00, 0x00, 0xff, 0xff, 0xa7, 0x38, 0x87,
+	0x1a, 0xcb, 0x42, 0x00, 0x00,
 }

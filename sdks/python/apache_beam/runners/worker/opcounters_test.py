@@ -37,7 +37,7 @@ from apache_beam.utils.counters import CounterFactory
 # These have to be at top level so the pickler can find them.
 
 
-class OldClassThatDoesNotImplementLen(object):  # pylint: disable=old-style-class
+class OldClassThatDoesNotImplementLen(object):
 
   def __init__(self):
     pass
@@ -98,9 +98,9 @@ class OperationCountersTest(unittest.TestCase):
     self.assertEqual(expected_elements, opcounts.element_counter.value())
     if expected_size is not None:
       if math.isnan(expected_size):
-        self.assertTrue(math.isnan(opcounts.mean_byte_counter.value()))
+        self.assertTrue(math.isnan(opcounts.mean_byte_counter.value()[0]))
       else:
-        self.assertEqual(expected_size, opcounts.mean_byte_counter.value())
+        self.assertEqual(expected_size, opcounts.mean_byte_counter.value()[0])
 
   def test_update_int(self):
     opcounts = OperationCounters(CounterFactory(), 'some-name',

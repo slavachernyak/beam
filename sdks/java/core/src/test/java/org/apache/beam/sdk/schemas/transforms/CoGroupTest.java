@@ -19,37 +19,36 @@ package org.apache.beam.sdk.schemas.transforms;
 
 import static junit.framework.TestCase.assertEquals;
 import static org.hamcrest.CoreMatchers.allOf;
-import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.collection.IsIterableContainingInAnyOrder.containsInAnyOrder;
 import static org.junit.Assert.assertThat;
 
-import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
-import org.apache.beam.sdk.TestUtils.KvMatcher;
 import org.apache.beam.sdk.schemas.Schema;
 import org.apache.beam.sdk.schemas.Schema.FieldType;
 import org.apache.beam.sdk.schemas.Schema.TypeName;
 import org.apache.beam.sdk.schemas.transforms.CoGroup.By;
+import org.apache.beam.sdk.schemas.utils.SchemaTestUtils.RowFieldMatcherIterableFieldAnyOrder;
 import org.apache.beam.sdk.testing.NeedsRunner;
 import org.apache.beam.sdk.testing.PAssert;
 import org.apache.beam.sdk.testing.TestPipeline;
+import org.apache.beam.sdk.testing.UsesSchema;
 import org.apache.beam.sdk.transforms.Create;
-import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionTuple;
 import org.apache.beam.sdk.values.Row;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableList;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Lists;
-import org.hamcrest.BaseMatcher;
-import org.hamcrest.Description;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableList;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Lists;
 import org.hamcrest.Matcher;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.ExpectedException;
+import org.junit.runner.RunWith;
+import org.junit.runners.JUnit4;
 
 /** Tests for {@link CoGroup}. */
+@RunWith(JUnit4.class)
+@Category(UsesSchema.class)
 public class CoGroupTest {
   @Rule public final transient TestPipeline pipeline = TestPipeline.create();
   @Rule public transient ExpectedException thrown = ExpectedException.none();
@@ -63,16 +62,11 @@ public class CoGroupTest {
 
   private static final Schema SIMPLE_CG_KEY_SCHEMA =
       Schema.builder().addStringField("user").addStringField("country").build();
-  private static final Schema SIMPLE_CG_OUTPUT_SCHEMA =
-      Schema.builder()
-          .addArrayField("pc1", FieldType.row(CG_SCHEMA_1))
-          .addArrayField("pc2", FieldType.row(CG_SCHEMA_1))
-          .addArrayField("pc3", FieldType.row(CG_SCHEMA_1))
-          .build();
 
   @Test
   @Category(NeedsRunner.class)
   public void testCoGroupByFieldNames() {
+    // Input
     PCollection<Row> pc1 =
         pipeline
             .apply(
@@ -116,83 +110,87 @@ public class CoGroupTest {
                     Row.withSchema(CG_SCHEMA_1).addValues("user2", 24, "ar").build()))
             .setRowSchema(CG_SCHEMA_1);
 
-    Row key1 = Row.withSchema(SIMPLE_CG_KEY_SCHEMA).addValues("user1", "us").build();
+    // Output
+    Schema expectedSchema =
+        Schema.builder()
+            .addRowField("key", SIMPLE_CG_KEY_SCHEMA)
+            .addIterableField("pc1", FieldType.row(CG_SCHEMA_1))
+            .addIterableField("pc2", FieldType.row(CG_SCHEMA_1))
+            .addIterableField("pc3", FieldType.row(CG_SCHEMA_1))
+            .build();
+
     Row key1Joined =
-        Row.withSchema(SIMPLE_CG_OUTPUT_SCHEMA)
-            .addValue(
+        Row.withSchema(expectedSchema)
+            .addValue(Row.withSchema(SIMPLE_CG_KEY_SCHEMA).addValues("user1", "us").build())
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_1).addValues("user1", 1, "us").build(),
                     Row.withSchema(CG_SCHEMA_1).addValues("user1", 2, "us").build()))
-            .addValue(
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_1).addValues("user1", 9, "us").build(),
                     Row.withSchema(CG_SCHEMA_1).addValues("user1", 10, "us").build()))
-            .addValue(
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_1).addValues("user1", 17, "us").build(),
                     Row.withSchema(CG_SCHEMA_1).addValues("user1", 18, "us").build()))
             .build();
 
-    Row key2 = Row.withSchema(SIMPLE_CG_KEY_SCHEMA).addValues("user1", "il").build();
     Row key2Joined =
-        Row.withSchema(SIMPLE_CG_OUTPUT_SCHEMA)
-            .addValue(
+        Row.withSchema(expectedSchema)
+            .addValue(Row.withSchema(SIMPLE_CG_KEY_SCHEMA).addValues("user1", "il").build())
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_1).addValues("user1", 3, "il").build(),
                     Row.withSchema(CG_SCHEMA_1).addValues("user1", 4, "il").build()))
-            .addValue(
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_1).addValues("user1", 11, "il").build(),
                     Row.withSchema(CG_SCHEMA_1).addValues("user1", 12, "il").build()))
-            .addValue(
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_1).addValues("user1", 19, "il").build(),
                     Row.withSchema(CG_SCHEMA_1).addValues("user1", 20, "il").build()))
             .build();
 
-    Row key3 = Row.withSchema(SIMPLE_CG_KEY_SCHEMA).addValues("user2", "fr").build();
     Row key3Joined =
-        Row.withSchema(SIMPLE_CG_OUTPUT_SCHEMA)
-            .addValue(
+        Row.withSchema(expectedSchema)
+            .addValue(Row.withSchema(SIMPLE_CG_KEY_SCHEMA).addValues("user2", "fr").build())
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_1).addValues("user2", 5, "fr").build(),
                     Row.withSchema(CG_SCHEMA_1).addValues("user2", 6, "fr").build()))
-            .addValue(
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_1).addValues("user2", 13, "fr").build(),
                     Row.withSchema(CG_SCHEMA_1).addValues("user2", 14, "fr").build()))
-            .addValue(
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_1).addValues("user2", 21, "fr").build(),
                     Row.withSchema(CG_SCHEMA_1).addValues("user2", 22, "fr").build()))
             .build();
 
-    Row key4 = Row.withSchema(SIMPLE_CG_KEY_SCHEMA).addValues("user2", "ar").build();
     Row key4Joined =
-        Row.withSchema(SIMPLE_CG_OUTPUT_SCHEMA)
-            .addValue(
+        Row.withSchema(expectedSchema)
+            .addValue(Row.withSchema(SIMPLE_CG_KEY_SCHEMA).addValues("user2", "ar").build())
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_1).addValues("user2", 7, "ar").build(),
                     Row.withSchema(CG_SCHEMA_1).addValues("user2", 8, "ar").build()))
-            .addValue(
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_1).addValues("user2", 15, "ar").build(),
                     Row.withSchema(CG_SCHEMA_1).addValues("user2", 16, "ar").build()))
-            .addValue(
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_1).addValues("user2", 23, "ar").build(),
                     Row.withSchema(CG_SCHEMA_1).addValues("user2", 24, "ar").build()))
             .build();
 
-    PCollection<KV<Row, Row>> joined =
+    PCollection<Row> joined =
         PCollectionTuple.of("pc1", pc1, "pc2", pc2, "pc3", pc3)
             .apply("CoGroup", CoGroup.join(By.fieldNames("user", "country")));
-    List<KV<Row, Row>> expected =
-        ImmutableList.of(
-            KV.of(key1, key1Joined),
-            KV.of(key2, key2Joined),
-            KV.of(key3, key3Joined),
-            KV.of(key4, key4Joined));
+    List<Row> expected = ImmutableList.of(key1Joined, key2Joined, key3Joined, key4Joined);
     PAssert.that(joined).satisfies(actual -> containsJoinedFields(expected, actual));
     pipeline.run();
   }
@@ -214,6 +212,7 @@ public class CoGroupTest {
   @Test
   @Category(NeedsRunner.class)
   public void testCoGroupByDifferentFields() {
+    // Inputs.
     PCollection<Row> pc1 =
         pipeline
             .apply(
@@ -257,75 +256,83 @@ public class CoGroupTest {
                     Row.withSchema(CG_SCHEMA_3).addValues("user2", 24, "ar").build()))
             .setRowSchema(CG_SCHEMA_3);
 
-    Row key1 = Row.withSchema(SIMPLE_CG_KEY_SCHEMA).addValues("user1", "us").build();
+    // Expected outputs
+    Schema expectedSchema =
+        Schema.builder()
+            .addRowField("key", SIMPLE_CG_KEY_SCHEMA)
+            .addIterableField("pc1", FieldType.row(CG_SCHEMA_1))
+            .addIterableField("pc2", FieldType.row(CG_SCHEMA_2))
+            .addIterableField("pc3", FieldType.row(CG_SCHEMA_3))
+            .build();
     Row key1Joined =
-        Row.withSchema(SIMPLE_CG_OUTPUT_SCHEMA)
-            .addValue(
+        Row.withSchema(expectedSchema)
+            .addValue(Row.withSchema(SIMPLE_CG_KEY_SCHEMA).addValues("user1", "us").build())
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_1).addValues("user1", 1, "us").build(),
                     Row.withSchema(CG_SCHEMA_1).addValues("user1", 2, "us").build()))
-            .addValue(
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_2).addValues("user1", 9, "us").build(),
                     Row.withSchema(CG_SCHEMA_2).addValues("user1", 10, "us").build()))
-            .addValue(
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_3).addValues("user1", 17, "us").build(),
                     Row.withSchema(CG_SCHEMA_3).addValues("user1", 18, "us").build()))
             .build();
 
-    Row key2 = Row.withSchema(SIMPLE_CG_KEY_SCHEMA).addValues("user1", "il").build();
     Row key2Joined =
-        Row.withSchema(SIMPLE_CG_OUTPUT_SCHEMA)
-            .addValue(
+        Row.withSchema(expectedSchema)
+            .addValue(Row.withSchema(SIMPLE_CG_KEY_SCHEMA).addValues("user1", "il").build())
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_1).addValues("user1", 3, "il").build(),
                     Row.withSchema(CG_SCHEMA_1).addValues("user1", 4, "il").build()))
-            .addValue(
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_2).addValues("user1", 11, "il").build(),
                     Row.withSchema(CG_SCHEMA_2).addValues("user1", 12, "il").build()))
-            .addValue(
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_3).addValues("user1", 19, "il").build(),
                     Row.withSchema(CG_SCHEMA_3).addValues("user1", 20, "il").build()))
             .build();
 
-    Row key3 = Row.withSchema(SIMPLE_CG_KEY_SCHEMA).addValues("user2", "fr").build();
     Row key3Joined =
-        Row.withSchema(SIMPLE_CG_OUTPUT_SCHEMA)
-            .addValue(
+        Row.withSchema(expectedSchema)
+            .addValue(Row.withSchema(SIMPLE_CG_KEY_SCHEMA).addValues("user2", "fr").build())
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_1).addValues("user2", 5, "fr").build(),
                     Row.withSchema(CG_SCHEMA_1).addValues("user2", 6, "fr").build()))
-            .addValue(
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_2).addValues("user2", 13, "fr").build(),
                     Row.withSchema(CG_SCHEMA_2).addValues("user2", 14, "fr").build()))
-            .addValue(
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_3).addValues("user2", 21, "fr").build(),
                     Row.withSchema(CG_SCHEMA_3).addValues("user2", 22, "fr").build()))
             .build();
 
-    Row key4 = Row.withSchema(SIMPLE_CG_KEY_SCHEMA).addValues("user2", "ar").build();
     Row key4Joined =
-        Row.withSchema(SIMPLE_CG_OUTPUT_SCHEMA)
-            .addValue(
+        Row.withSchema(expectedSchema)
+            .addValue(Row.withSchema(SIMPLE_CG_KEY_SCHEMA).addValues("user2", "ar").build())
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_1).addValues("user2", 7, "ar").build(),
                     Row.withSchema(CG_SCHEMA_1).addValues("user2", 8, "ar").build()))
-            .addValue(
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_2).addValues("user2", 15, "ar").build(),
                     Row.withSchema(CG_SCHEMA_2).addValues("user2", 16, "ar").build()))
-            .addValue(
+            .addIterable(
                 Lists.newArrayList(
                     Row.withSchema(CG_SCHEMA_3).addValues("user2", 23, "ar").build(),
                     Row.withSchema(CG_SCHEMA_3).addValues("user2", 24, "ar").build()))
             .build();
 
-    PCollection<KV<Row, Row>> joined =
+    PCollection<Row> joined =
         PCollectionTuple.of("pc1", pc1, "pc2", pc2, "pc3", pc3)
             .apply(
                 "CoGroup",
@@ -333,12 +340,8 @@ public class CoGroupTest {
                     .join("pc2", By.fieldNames("user2", "country2"))
                     .join("pc3", By.fieldNames("user3", "country3")));
 
-    List<KV<Row, Row>> expected =
-        ImmutableList.of(
-            KV.of(key1, key1Joined),
-            KV.of(key2, key2Joined),
-            KV.of(key3, key3Joined),
-            KV.of(key4, key4Joined));
+    List<Row> expected = ImmutableList.of(key1Joined, key2Joined, key3Joined, key4Joined);
+
     PAssert.that(joined).satisfies(actual -> containsJoinedFields(expected, actual));
     pipeline.run();
   }
@@ -363,7 +366,7 @@ public class CoGroupTest {
             "Create3", Create.of(Row.withSchema(CG_SCHEMA_3).addValues("user1", 17, "us").build()));
 
     thrown.expect(IllegalArgumentException.class);
-    PCollection<KV<Row, Row>> joined =
+    PCollection<Row> joined =
         PCollectionTuple.of("pc1", pc1, "pc2", pc2, "pc3", pc3)
             .apply(
                 "CoGroup",
@@ -389,36 +392,12 @@ public class CoGroupTest {
             .setRowSchema(CG_SCHEMA_1);
 
     thrown.expect(IllegalStateException.class);
-    PCollection<KV<Row, Row>> joined =
+    PCollection<Row> joined =
         PCollectionTuple.of("pc1", pc1, "pc2", pc2)
             .apply(
                 "CoGroup",
                 CoGroup.join("pc1", By.fieldNames("user")).join("pc2", By.fieldNames("count")));
     pipeline.run();
-  }
-
-  private List<Row> innerJoin(
-      List<Row> inputs1,
-      List<Row> inputs2,
-      List<Row> inputs3,
-      String[] keys1,
-      String[] keys2,
-      String[] keys3,
-      Schema expectedSchema) {
-    List<Row> joined = Lists.newArrayList();
-    for (Row row1 : inputs1) {
-      for (Row row2 : inputs2) {
-        for (Row row3 : inputs3) {
-          List key1 = Arrays.stream(keys1).map(row1::getValue).collect(Collectors.toList());
-          List key2 = Arrays.stream(keys2).map(row2::getValue).collect(Collectors.toList());
-          List key3 = Arrays.stream(keys3).map(row3::getValue).collect(Collectors.toList());
-          if (key1.equals(key2) && key2.equals(key3)) {
-            joined.add(Row.withSchema(expectedSchema).addValues(row1, row2, row3).build());
-          }
-        }
-      }
-    }
-    return joined;
   }
 
   @Test
@@ -477,7 +456,7 @@ public class CoGroupTest {
     assertEquals(expectedSchema, joined.getSchema());
 
     List<Row> expectedJoinedRows =
-        innerJoin(
+        JoinTestUtils.innerJoin(
             pc1Rows,
             pc2Rows,
             pc3Rows,
@@ -545,14 +524,14 @@ public class CoGroupTest {
         PCollectionTuple.of("pc1", pc1, "pc2", pc2, "pc3", pc3)
             .apply(
                 "CoGroup",
-                CoGroup.join("pc1", By.fieldNames("user", "country").withOuterJoinParticipation())
-                    .join("pc2", By.fieldNames("user2", "country2").withOuterJoinParticipation())
-                    .join("pc3", By.fieldNames("user3", "country3").withOuterJoinParticipation())
+                CoGroup.join("pc1", By.fieldNames("user", "country").withOptionalParticipation())
+                    .join("pc2", By.fieldNames("user2", "country2").withOptionalParticipation())
+                    .join("pc3", By.fieldNames("user3", "country3").withOptionalParticipation())
                     .crossProductJoin());
     assertEquals(expectedSchema, joined.getSchema());
 
     List<Row> expectedJoinedRows =
-        innerJoin(
+        JoinTestUtils.innerJoin(
             pc1Rows,
             pc2Rows,
             pc3Rows,
@@ -633,13 +612,13 @@ public class CoGroupTest {
             .apply(
                 "CoGroup",
                 CoGroup.join("pc1", By.fieldNames("user", "country"))
-                    .join("pc2", By.fieldNames("user2", "country2").withOuterJoinParticipation())
+                    .join("pc2", By.fieldNames("user2", "country2").withOptionalParticipation())
                     .join("pc3", By.fieldNames("user3", "country3"))
                     .crossProductJoin());
     assertEquals(expectedSchema, joined.getSchema());
 
     List<Row> expectedJoinedRows =
-        innerJoin(
+        JoinTestUtils.innerJoin(
             pc1Rows,
             pc2Rows,
             pc3Rows,
@@ -703,46 +682,21 @@ public class CoGroupTest {
     pipeline.run();
   }
 
-  private static Void containsJoinedFields(
-      List<KV<Row, Row>> expected, Iterable<KV<Row, Row>> actual) {
-    List<Matcher<? super KV<Row, Row>>> matchers = Lists.newArrayList();
-    for (KV<Row, Row> row : expected) {
+  private static Void containsJoinedFields(List<Row> expected, Iterable<Row> actual) {
+    List<Matcher<? super Row>> matchers = Lists.newArrayList();
+    for (Row row : expected) {
       List<Matcher> fieldMatchers = Lists.newArrayList();
-      Row value = row.getValue();
-      Schema valueSchema = value.getSchema();
-      for (int i = 0; i < valueSchema.getFieldCount(); ++i) {
-        assertEquals(TypeName.ARRAY, valueSchema.getField(i).getType().getTypeName());
-        fieldMatchers.add(new ArrayFieldMatchesAnyOrder(i, value.getArray(i)));
+      Schema schema = row.getSchema();
+      fieldMatchers.add(
+          new RowFieldMatcherIterableFieldAnyOrder(row.getSchema(), 0, row.getRow(0)));
+      for (int i = 1; i < schema.getFieldCount(); ++i) {
+        assertEquals(TypeName.ITERABLE, schema.getField(i).getType().getTypeName());
+        fieldMatchers.add(
+            new RowFieldMatcherIterableFieldAnyOrder(row.getSchema(), i, row.getIterable(i)));
       }
-      matchers.add(
-          KvMatcher.isKv(equalTo(row.getKey()), allOf(fieldMatchers.toArray(new Matcher[0]))));
+      matchers.add(allOf(fieldMatchers.toArray(new Matcher[0])));
     }
     assertThat(actual, containsInAnyOrder(matchers.toArray(new Matcher[0])));
     return null;
-  }
-
-  static class ArrayFieldMatchesAnyOrder extends BaseMatcher<Row> {
-    int fieldIndex;
-    Row[] expected;
-
-    ArrayFieldMatchesAnyOrder(int fieldIndex, List<Row> expected) {
-      this.fieldIndex = fieldIndex;
-      this.expected = expected.toArray(new Row[0]);
-    }
-
-    @Override
-    public boolean matches(Object item) {
-      if (!(item instanceof Row)) {
-        return false;
-      }
-      Row row = (Row) item;
-      List<Row> actual = row.getArray(fieldIndex);
-      return containsInAnyOrder(expected).matches(actual);
-    }
-
-    @Override
-    public void describeTo(Description description) {
-      description.appendText("arrayFieldMatchesAnyOrder");
-    }
   }
 }

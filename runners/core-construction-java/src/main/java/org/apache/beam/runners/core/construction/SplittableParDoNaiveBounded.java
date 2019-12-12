@@ -17,7 +17,7 @@
  */
 package org.apache.beam.runners.core.construction;
 
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkArgument;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -49,7 +49,7 @@ import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.sdk.values.PValue;
 import org.apache.beam.sdk.values.Row;
 import org.apache.beam.sdk.values.TupleTag;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.util.concurrent.Uninterruptibles;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.util.concurrent.Uninterruptibles;
 import org.joda.time.Instant;
 
 /**
@@ -111,8 +111,7 @@ public class SplittableParDoNaiveBounded {
     }
   }
 
-  static class NaiveProcessFn<
-          InputT, OutputT, RestrictionT, TrackerT extends RestrictionTracker<RestrictionT, ?>>
+  static class NaiveProcessFn<InputT, OutputT, RestrictionT, PositionT>
       extends DoFn<KV<InputT, RestrictionT>, OutputT> {
     private final DoFn<InputT, OutputT> fn;
 
@@ -144,11 +143,11 @@ public class SplittableParDoNaiveBounded {
       InputT element = c.element().getKey();
       RestrictionT restriction = c.element().getValue();
       while (true) {
-        TrackerT tracker = invoker.invokeNewTracker(restriction);
+        RestrictionTracker<RestrictionT, PositionT> tracker = invoker.invokeNewTracker(restriction);
         ProcessContinuation continuation =
             invoker.invokeProcessElement(new NestedProcessContext<>(fn, c, element, w, tracker));
         if (continuation.shouldResume()) {
-          restriction = tracker.checkpoint();
+          restriction = tracker.trySplit(0).getResidual();
           Uninterruptibles.sleepUninterruptibly(
               continuation.resumeDelay().getMillis(), TimeUnit.MILLISECONDS);
         } else {
@@ -239,7 +238,12 @@ public class SplittableParDoNaiveBounded {
       }
 
       @Override
-      public Object schemaElement(DoFn<InputT, OutputT> doFn) {
+      public Object sideInput(String tagId) {
+        throw new UnsupportedOperationException();
+      }
+
+      @Override
+      public Object schemaElement(int index) {
         throw new UnsupportedOperationException();
       }
 

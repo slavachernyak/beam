@@ -21,37 +21,72 @@ import collections
 import logging
 import os
 import random
+import shutil
+import sys
 import tempfile
 import threading
 import time
 import traceback
+import typing
 import unittest
 import uuid
 from builtins import range
+from typing import Dict
 
+# patches unittest.TestCase to be python3 compatible
+import future.tests.base  # pylint: disable=unused-import
+import hamcrest  # pylint: disable=ungrouped-imports
+from hamcrest.core.matcher import Matcher
+from hamcrest.core.string_description import StringDescription
 from tenacity import retry
 from tenacity import stop_after_attempt
 
 import apache_beam as beam
+from apache_beam.io import iobase
 from apache_beam.io import restriction_trackers
 from apache_beam.metrics import monitoring_infos
 from apache_beam.metrics.execution import MetricKey
-from apache_beam.metrics.execution import MetricsEnvironment
 from apache_beam.metrics.metricbase import MetricName
-from apache_beam.portability import python_urns
-from apache_beam.portability.api import beam_runner_api_pb2
+from apache_beam.options.pipeline_options import DebugOptions
+from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.runners.portability import fn_api_runner
 from apache_beam.runners.worker import data_plane
+from apache_beam.runners.worker import sdk_worker
 from apache_beam.runners.worker import statesampler
+from apache_beam.testing.synthetic_pipeline import SyntheticSDFAsSource
+from apache_beam.testing.test_stream import TestStream
 from apache_beam.testing.util import assert_that
 from apache_beam.testing.util import equal_to
+from apache_beam.tools import utils
+from apache_beam.transforms import core
+from apache_beam.transforms import environments
 from apache_beam.transforms import userstate
 from apache_beam.transforms import window
+from apache_beam.utils import timestamp
 
 if statesampler.FAST_SAMPLER:
   DEFAULT_SAMPLING_PERIOD_MS = statesampler.DEFAULT_SAMPLING_PERIOD_MS
 else:
   DEFAULT_SAMPLING_PERIOD_MS = 0
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _matcher_or_equal_to(value_or_matcher):
+  """Pass-thru for matchers, and wraps value inputs in an equal_to matcher."""
+  if value_or_matcher is None:
+    return None
+  if isinstance(value_or_matcher, Matcher):
+    return value_or_matcher
+  return hamcrest.equal_to(value_or_matcher)
+
+
+def has_urn_and_labels(mi, urn, labels):
+  """Returns true if it the monitoring_info contains the labels and urn."""
+  def contains_labels(mi, labels):
+    # Check all the labels and their values exist in the monitoring_info
+    return all(item in mi.labels.items() for item in labels.items())
+  return contains_labels(mi, labels) and mi.urn == urn
 
 
 class FnApiRunnerTest(unittest.TestCase):
@@ -62,7 +97,7 @@ class FnApiRunnerTest(unittest.TestCase):
   def test_assert_that(self):
     # TODO: figure out a way for fn_api_runner to parse and raise the
     # underlying exception.
-    with self.assertRaisesRegexp(Exception, 'Failed assert'):
+    with self.assertRaisesRegex(Exception, 'Failed assert'):
       with self.create_pipeline() as p:
         assert_that(p | beam.Create(['a', 'b']), equal_to(['a']))
 
@@ -77,48 +112,6 @@ class FnApiRunnerTest(unittest.TestCase):
              | beam.Map(lambda e: e * 2)
              | beam.Map(lambda e: e + 'x'))
       assert_that(res, equal_to(['aax', 'bcbcx']))
-
-  def test_pardo_metrics(self):
-
-    class MyDoFn(beam.DoFn):
-
-      def start_bundle(self):
-        self.count = beam.metrics.Metrics.counter('ns1', 'elements')
-
-      def process(self, element):
-        self.count.inc(element)
-        return [element]
-
-    class MyOtherDoFn(beam.DoFn):
-
-      def start_bundle(self):
-        self.count = beam.metrics.Metrics.counter('ns2', 'elementsplusone')
-
-      def process(self, element):
-        self.count.inc(element + 1)
-        return [element]
-
-    with self.create_pipeline() as p:
-      res = (p | beam.Create([1, 2, 3])
-             | 'mydofn' >> beam.ParDo(MyDoFn())
-             | 'myotherdofn' >> beam.ParDo(MyOtherDoFn()))
-      p.run()
-      if not MetricsEnvironment.METRICS_SUPPORTED:
-        self.skipTest('Metrics are not supported.')
-
-      counter_updates = [{'key': key, 'value': val}
-                         for container in p.runner.metrics_containers()
-                         for key, val in
-                         container.get_updates().counters.items()]
-      counter_values = [update['value'] for update in counter_updates]
-      counter_keys = [update['key'] for update in counter_updates]
-      assert_that(res, equal_to([1, 2, 3]))
-      self.assertEqual(counter_values, [6, 9])
-      self.assertEqual(counter_keys, [
-          MetricKey('mydofn',
-                    MetricName('ns1', 'elements')),
-          MetricKey('myotherdofn',
-                    MetricName('ns2', 'elementsplusone'))])
 
   def test_pardo_side_outputs(self):
     def tee(elem, *tags):
@@ -228,6 +221,19 @@ class FnApiRunnerTest(unittest.TestCase):
                           beam.pvalue.AsMultiMap(side)),
           equal_to([('a', [1, 3]), ('b', [2])]))
 
+  def test_multimap_side_input_type_coercion(self):
+    with self.create_pipeline() as p:
+      main = p | 'main' >> beam.Create(['a', 'b'])
+      # The type of this side-input is forced to Any (overriding type
+      # inference). Without type coercion to Tuple[Any, Any], the usage of this
+      # side-input in AsMultiMap() below should fail.
+      side = (p | 'side' >> beam.Create([('a', 1), ('b', 2), ('a', 3)])
+              .with_output_types(typing.Any))
+      assert_that(
+          main | beam.Map(lambda k, d: (k, sorted(d[k])),
+                          beam.pvalue.AsMultiMap(side)),
+          equal_to([('a', [1, 3]), ('b', [2])]))
+
   def test_pardo_unfusable_side_inputs(self):
     def cross_product(elem, sides):
       for side in sides:
@@ -249,8 +255,7 @@ class FnApiRunnerTest(unittest.TestCase):
           equal_to([('a', 'a'), ('a', 'b'), ('b', 'a'), ('b', 'b')]))
 
   def test_pardo_state_only(self):
-    index_state_spec = userstate.CombiningValueStateSpec(
-        'index', beam.coders.IterableCoder(beam.coders.VarIntCoder()), sum)
+    index_state_spec = userstate.CombiningValueStateSpec('index', sum)
 
     # TODO(ccy): State isn't detected with Map/FlatMap.
     class AddIndex(beam.DoFn):
@@ -267,8 +272,40 @@ class FnApiRunnerTest(unittest.TestCase):
                 ('B', 'b', 3)]
 
     with self.create_pipeline() as p:
-      assert_that(p | beam.Create(inputs) | beam.ParDo(AddIndex()),
-                  equal_to(expected))
+      # TODO(BEAM-8893): Allow the reshuffle.
+      assert_that(
+          p | beam.Create(inputs, reshuffle=False) | beam.ParDo(AddIndex()),
+          equal_to(expected))
+
+  @unittest.skip('TestStream not yet supported')
+  def test_teststream_pardo_timers(self):
+    timer_spec = userstate.TimerSpec('timer', userstate.TimeDomain.WATERMARK)
+
+    class TimerDoFn(beam.DoFn):
+      def process(self, element, timer=beam.DoFn.TimerParam(timer_spec)):
+        unused_key, ts = element
+        timer.set(ts)
+        timer.set(2 * ts)
+
+      @userstate.on_timer(timer_spec)
+      def process_timer(self):
+        yield 'fired'
+
+    ts = (TestStream()
+          .add_elements([('k1', 10)])  # Set timer for 20
+          .advance_watermark_to(100)
+          .add_elements([('k2', 100)])  # Set timer for 200
+          .advance_watermark_to(1000))
+
+    with self.create_pipeline() as p:
+      _ = (
+          p
+          | ts
+          | beam.ParDo(TimerDoFn())
+          | beam.Map(lambda x, ts=beam.DoFn.TimestampParam: (x, ts)))
+
+      #expected = [('fired', ts) for ts in (20, 200)]
+      #assert_that(actual, equal_to(expected))
 
   def test_pardo_timers(self):
     timer_spec = userstate.TimerSpec('timer', userstate.TimeDomain.WATERMARK)
@@ -282,6 +319,43 @@ class FnApiRunnerTest(unittest.TestCase):
       @userstate.on_timer(timer_spec)
       def process_timer(self):
         yield 'fired'
+
+    with self.create_pipeline() as p:
+      actual = (
+          p
+          | beam.Create([('k1', 10), ('k2', 100)])
+          | beam.ParDo(TimerDoFn())
+          | beam.Map(lambda x, ts=beam.DoFn.TimestampParam: (x, ts)))
+
+      expected = [('fired', ts) for ts in (20, 200)]
+      assert_that(actual, equal_to(expected))
+
+  def test_pardo_timers_clear(self):
+    if type(self).__name__ != 'FlinkRunnerTest':
+      # FnApiRunner fails to wire multiple timer collections
+      # this method can replace test_pardo_timers when the issue is fixed
+      self.skipTest('BEAM-7074: Multiple timer definitions not supported.')
+
+    timer_spec = userstate.TimerSpec('timer', userstate.TimeDomain.WATERMARK)
+    clear_timer_spec = userstate.TimerSpec('clear_timer',
+                                           userstate.TimeDomain.WATERMARK)
+
+    class TimerDoFn(beam.DoFn):
+      def process(self, element, timer=beam.DoFn.TimerParam(timer_spec),
+                  clear_timer=beam.DoFn.TimerParam(clear_timer_spec)):
+        unused_key, ts = element
+        timer.set(ts)
+        timer.set(2 * ts)
+        clear_timer.set(ts)
+        clear_timer.clear()
+
+      @userstate.on_timer(timer_spec)
+      def process_timer(self):
+        yield 'fired'
+
+      @userstate.on_timer(clear_timer_spec)
+      def process_clear_timer(self):
+        yield 'should not fire'
 
     with self.create_pipeline() as p:
       actual = (
@@ -346,7 +420,8 @@ class FnApiRunnerTest(unittest.TestCase):
     with self.create_pipeline() as p:
       actual = (
           p
-          | beam.Create(elements)
+          # TODO(BEAM-8893): Allow the reshuffle.
+          | beam.Create(elements, reshuffle=False)
           # Send even and odd elements to different windows.
           | beam.Map(lambda e: window.TimestampedValue(e, ord(e) % 2))
           | beam.WindowInto(window.FixedWindows(1) if windowed
@@ -357,35 +432,95 @@ class FnApiRunnerTest(unittest.TestCase):
       assert_that(actual, is_buffered_correctly)
 
   def test_sdf(self):
+    class ExpandingStringsDoFn(beam.DoFn):
+      def process(
+          self,
+          element,
+          restriction_tracker=beam.DoFn.RestrictionParam(
+              ExpandStringsProvider())):
+        assert isinstance(restriction_tracker, iobase.RestrictionTrackerView)
+        cur = restriction_tracker.current_restriction().start
+        while restriction_tracker.try_claim(cur):
+          yield element[cur]
+          cur += 1
+
+    with self.create_pipeline() as p:
+      data = ['abc', 'defghijklmno', 'pqrstuv', 'wxyz']
+      actual = (
+          p
+          | beam.Create(data)
+          | beam.ParDo(ExpandingStringsDoFn()))
+      assert_that(actual, equal_to(list(''.join(data))))
+
+  def test_sdf_with_check_done_failed(self):
+    class ExpandingStringsDoFn(beam.DoFn):
+      def process(
+          self,
+          element,
+          restriction_tracker=beam.DoFn.RestrictionParam(
+              ExpandStringsProvider())):
+        assert isinstance(restriction_tracker, iobase.RestrictionTrackerView)
+        cur = restriction_tracker.current_restriction().start
+        while restriction_tracker.try_claim(cur):
+          yield element[cur]
+          cur += 1
+          return
+    with self.assertRaises(Exception):
+      with self.create_pipeline() as p:
+        data = ['abc', 'defghijklmno', 'pqrstuv', 'wxyz']
+        _ = (
+            p
+            | beam.Create(data)
+            | beam.ParDo(ExpandingStringsDoFn()))
+
+  def test_sdf_with_watermark_tracking(self):
+
+    class ExpandingStringsDoFn(beam.DoFn):
+      def process(
+          self,
+          element,
+          restriction_tracker=beam.DoFn.RestrictionParam(
+              ExpandStringsProvider()),
+          watermark_estimator=beam.DoFn.WatermarkEstimatorParam(
+              core.WatermarkEstimator())):
+        cur = restriction_tracker.current_restriction().start
+        start = cur
+        while restriction_tracker.try_claim(cur):
+          watermark_estimator.set_watermark(timestamp.Timestamp(micros=cur))
+          assert watermark_estimator.current_watermark().micros == start
+          yield element[cur]
+          if cur % 2 == 1:
+            restriction_tracker.defer_remainder(timestamp.Duration(micros=5))
+            return
+          cur += 1
+
+    with self.create_pipeline() as p:
+      data = ['abc', 'defghijklmno', 'pqrstuv', 'wxyz']
+      actual = (
+          p
+          | beam.Create(data)
+          | beam.ParDo(ExpandingStringsDoFn()))
+      assert_that(actual, equal_to(list(''.join(data))))
+
+  def test_sdf_with_sdf_initiated_checkpointing(self):
 
     counter = beam.metrics.Metrics.counter('ns', 'my_counter')
 
-    class ExpandStringsProvider(beam.transforms.core.RestrictionProvider):
-      def initial_restriction(self, element):
-        return (0, len(element))
-
-      def create_tracker(self, restriction):
-        return restriction_trackers.OffsetRestrictionTracker(
-            restriction[0], restriction[1])
-
-      def split(self, element, restriction):
-        start, end = restriction
-        middle = (end - start) // 2
-        return [(start, middle), (middle, end)]
-
     class ExpandStringsDoFn(beam.DoFn):
-      def process(self, element, restriction_tracker=ExpandStringsProvider()):
-        assert isinstance(
-            restriction_tracker,
-            restriction_trackers.OffsetRestrictionTracker), restriction_tracker
-        for k in range(*restriction_tracker.current_restriction()):
-          if not restriction_tracker.try_claim(k):
-            return
+      def process(
+          self,
+          element,
+          restriction_tracker=beam.DoFn.RestrictionParam(
+              ExpandStringsProvider())):
+        assert isinstance(restriction_tracker, iobase.RestrictionTrackerView)
+        cur = restriction_tracker.current_restriction().start
+        while restriction_tracker.try_claim(cur):
           counter.inc()
-          yield element[k]
-          if k % 2 == 1:
+          yield element[cur]
+          if cur % 2 == 1:
             restriction_tracker.defer_remainder()
             return
+          cur += 1
 
     with self.create_pipeline() as p:
       data = ['abc', 'defghijklmno', 'pqrstuv', 'wxyz']
@@ -527,12 +662,8 @@ class FnApiRunnerTest(unittest.TestCase):
       pcoll_b = p | 'b' >> beam.Create(['b'])
       assert_that((pcoll_a, pcoll_b) | First(), equal_to(['a']))
 
-  def test_metrics(self):
+  def test_metrics(self, check_gauge=True):
     p = self.create_pipeline()
-    if not isinstance(p.runner, fn_api_runner.FnApiRunner):
-      # This test is inherited by others that may not support the same
-      # internal way of accessing progress metrics.
-      self.skipTest('Metrics not supported.')
 
     counter = beam.metrics.Metrics.counter('ns', 'counter')
     distribution = beam.metrics.Metrics.distribution('ns', 'distribution')
@@ -543,7 +674,7 @@ class FnApiRunnerTest(unittest.TestCase):
     pcoll | 'count1' >> beam.FlatMap(lambda x: counter.inc())
     pcoll | 'count2' >> beam.FlatMap(lambda x: counter.inc(len(x)))
     pcoll | 'dist' >> beam.FlatMap(lambda x: distribution.update(len(x)))
-    pcoll | 'gauge' >> beam.FlatMap(lambda x: gauge.set(len(x)))
+    pcoll | 'gauge' >> beam.FlatMap(lambda x: gauge.set(3))
 
     res = p.run()
     res.wait_until_finish()
@@ -553,21 +684,312 @@ class FnApiRunnerTest(unittest.TestCase):
     c2, = res.metrics().query(beam.metrics.MetricsFilter().with_step('count2'))[
         'counters']
     self.assertEqual(c2.committed, 4)
+
     dist, = res.metrics().query(beam.metrics.MetricsFilter().with_step('dist'))[
         'distributions']
-    gaug, = res.metrics().query(
-        beam.metrics.MetricsFilter().with_step('gauge'))['gauges']
     self.assertEqual(
         dist.committed.data, beam.metrics.cells.DistributionData(4, 2, 1, 3))
     self.assertEqual(dist.committed.mean, 2.0)
-    self.assertEqual(gaug.committed.value, 3)
+
+    if check_gauge:
+      gaug, = res.metrics().query(
+          beam.metrics.MetricsFilter().with_step('gauge'))['gauges']
+      self.assertEqual(gaug.committed.value, 3)
+
+  def test_callbacks_with_exception(self):
+    elements_list = ['1', '2']
+
+    def raise_expetion():
+      raise Exception('raise exception when calling callback')
+
+    class FinalizebleDoFnWithException(beam.DoFn):
+
+      def process(
+          self,
+          element,
+          bundle_finalizer=beam.DoFn.BundleFinalizerParam):
+        bundle_finalizer.register(raise_expetion)
+        yield element
+
+    with self.create_pipeline() as p:
+      res = (p
+             | beam.Create(elements_list)
+             | beam.ParDo(FinalizebleDoFnWithException()))
+      assert_that(res, equal_to(['1', '2']))
+
+  def test_register_finalizations(self):
+    event_recorder = EventRecorder(tempfile.gettempdir())
+    elements_list = ['2', '1']
+
+    class FinalizableDoFn(beam.DoFn):
+      def process(
+          self,
+          element,
+          bundle_finalizer=beam.DoFn.BundleFinalizerParam):
+        bundle_finalizer.register(lambda: event_recorder.record(element))
+        yield element
+
+    with self.create_pipeline() as p:
+      res = (p
+             | beam.Create(elements_list)
+             | beam.ParDo(FinalizableDoFn()))
+
+      assert_that(res, equal_to(elements_list))
+
+    results = event_recorder.events()
+    event_recorder.cleanup()
+    self.assertEqual(results, sorted(elements_list))
+
+  def test_sdf_synthetic_source(self):
+    common_attrs = {
+        'key_size': 1,
+        'value_size': 1,
+        'initial_splitting_num_bundles': 2,
+        'initial_splitting_desired_bundle_size': 2,
+        'sleep_per_input_record_sec': 0,
+        'initial_splitting': 'const'
+    }
+    num_source_description = 5
+    min_num_record = 10
+    max_num_record = 20
+
+    # pylint: disable=unused-variable
+    source_descriptions = ([dict(
+        {'num_records': random.randint(min_num_record, max_num_record)},
+        **common_attrs) for i in range(0, num_source_description)])
+    total_num_records = 0
+    for source in source_descriptions:
+      total_num_records += source['num_records']
+
+    with self.create_pipeline() as p:
+      res = (p
+             | beam.Create(source_descriptions)
+             | beam.ParDo(SyntheticSDFAsSource())
+             | beam.combiners.Count.Globally())
+      assert_that(res, equal_to([total_num_records]))
+
+
+# These tests are kept in a separate group so that they are
+# not ran in the FnApiRunnerTestWithBundleRepeat which repeats
+# bundle processing. This breaks the byte sampling metrics as
+# it makes the probability of sampling far too small
+# upon repeating bundle processing due to unncessarily incrementing
+# the sampling counter.
+class FnApiRunnerMetricsTest(unittest.TestCase):
+
+  def assert_has_counter(
+      self, monitoring_infos, urn, labels, value=None, ge_value=None):
+    # TODO(ajamato): Consider adding a matcher framework
+    found = 0
+    matches = []
+    for mi in monitoring_infos:
+      if has_urn_and_labels(mi, urn, labels):
+        matches.append(mi.metric.counter_data.int64_value)
+        if ge_value is not None:
+          if mi.metric.counter_data.int64_value >= ge_value:
+            found = found + 1
+        elif value is not None:
+          if mi.metric.counter_data.int64_value == value:
+            found = found + 1
+        else:
+          found = found + 1
+    ge_value_str = {'ge_value' : ge_value} if ge_value else ''
+    value_str = {'value' : value} if value else ''
+    self.assertEqual(
+        1, found, "Found (%s, %s) Expected only 1 monitoring_info for %s." %
+        (found, matches, (urn, labels, value_str, ge_value_str),))
+
+  def assert_has_distribution(
+      self, monitoring_infos, urn, labels,
+      sum=None, count=None, min=None, max=None):
+    # TODO(ajamato): Consider adding a matcher framework
+    sum = _matcher_or_equal_to(sum)
+    count = _matcher_or_equal_to(count)
+    min = _matcher_or_equal_to(min)
+    max = _matcher_or_equal_to(max)
+    found = 0
+    description = StringDescription()
+    for mi in monitoring_infos:
+      if has_urn_and_labels(mi, urn, labels):
+        int_dist = mi.metric.distribution_data.int_distribution_data
+        increment = 1
+        if sum is not None:
+          description.append_text(' sum: ')
+          sum.describe_to(description)
+          if not sum.matches(int_dist.sum):
+            increment = 0
+        if count is not None:
+          description.append_text(' count: ')
+          count.describe_to(description)
+          if not count.matches(int_dist.count):
+            increment = 0
+        if min is not None:
+          description.append_text(' min: ')
+          min.describe_to(description)
+          if not min.matches(int_dist.min):
+            increment = 0
+        if max is not None:
+          description.append_text(' max: ')
+          max.describe_to(description)
+          if not max.matches(int_dist.max):
+            increment = 0
+        found += increment
+    self.assertEqual(
+        1, found, "Found (%s) Expected only 1 monitoring_info for %s." %
+        (found, (urn, labels, str(description)),))
+
+  def create_pipeline(self):
+    return beam.Pipeline(runner=fn_api_runner.FnApiRunner())
+
+  def test_element_count_metrics(self):
+    class GenerateTwoOutputs(beam.DoFn):
+      def process(self, element):
+        yield str(element) + '1'
+        yield beam.pvalue.TaggedOutput('SecondOutput', str(element) + '2')
+        yield beam.pvalue.TaggedOutput('SecondOutput', str(element) + '2')
+        yield beam.pvalue.TaggedOutput('ThirdOutput', str(element) + '3')
+
+    class PassThrough(beam.DoFn):
+      def process(self, element):
+        yield element
+
+    p = self.create_pipeline()
+
+    # Produce enough elements to make sure byte sampling occurs.
+    num_source_elems = 100
+    pcoll = p | beam.Create(
+        ['a%d' % i for i in range(num_source_elems)], reshuffle=False)
+
+    # pylint: disable=expression-not-assigned
+    pardo = ('StepThatDoesTwoOutputs' >> beam.ParDo(
+        GenerateTwoOutputs()).with_outputs('SecondOutput',
+                                           'ThirdOutput',
+                                           main='FirstAndMainOutput'))
+
+    # Actually feed pcollection to pardo
+    second_output, third_output, first_output = (pcoll | pardo)
+
+    # consume some of elements
+    merged = ((first_output, second_output, third_output) | beam.Flatten())
+    merged | ('PassThrough') >> beam.ParDo(PassThrough())
+    second_output | ('PassThrough2') >> beam.ParDo(PassThrough())
+
+    res = p.run()
+    res.wait_until_finish()
+
+    result_metrics = res.monitoring_metrics()
+
+    counters = result_metrics.monitoring_infos()
+    # All element count and byte count metrics must have a PCOLLECTION_LABEL.
+    self.assertFalse([x for x in counters if
+                      x.urn in [monitoring_infos.ELEMENT_COUNT_URN,
+                                monitoring_infos.SAMPLED_BYTE_SIZE_URN]
+                      and
+                      monitoring_infos.PCOLLECTION_LABEL not in x.labels])
+    try:
+      labels = {
+          monitoring_infos.PCOLLECTION_LABEL : 'ref_PCollection_PCollection_1'}
+      self.assert_has_counter(
+          counters, monitoring_infos.ELEMENT_COUNT_URN, labels, 1)
+
+      # Create output.
+      labels = {monitoring_infos.PCOLLECTION_LABEL :
+                    'ref_PCollection_PCollection_3'}
+      self.assert_has_counter(
+          counters,
+          monitoring_infos.ELEMENT_COUNT_URN, labels, num_source_elems)
+      self.assert_has_distribution(
+          counters, monitoring_infos.SAMPLED_BYTE_SIZE_URN, labels,
+          min=hamcrest.greater_than(0),
+          max=hamcrest.greater_than(0),
+          sum=hamcrest.greater_than(0),
+          count=hamcrest.greater_than(0))
+
+      # GenerateTwoOutputs, main output.
+      labels = {monitoring_infos.PCOLLECTION_LABEL :
+                    'ref_PCollection_PCollection_4'}
+      self.assert_has_counter(
+          counters,
+          monitoring_infos.ELEMENT_COUNT_URN, labels, num_source_elems)
+      self.assert_has_distribution(
+          counters, monitoring_infos.SAMPLED_BYTE_SIZE_URN, labels,
+          min=hamcrest.greater_than(0),
+          max=hamcrest.greater_than(0),
+          sum=hamcrest.greater_than(0),
+          count=hamcrest.greater_than(0))
+
+      # GenerateTwoOutputs, "SecondOutput" output.
+      labels = {monitoring_infos.PCOLLECTION_LABEL :
+                    'ref_PCollection_PCollection_5'}
+      self.assert_has_counter(
+          counters,
+          monitoring_infos.ELEMENT_COUNT_URN, labels, 2 * num_source_elems)
+      self.assert_has_distribution(
+          counters, monitoring_infos.SAMPLED_BYTE_SIZE_URN, labels,
+          min=hamcrest.greater_than(0),
+          max=hamcrest.greater_than(0),
+          sum=hamcrest.greater_than(0),
+          count=hamcrest.greater_than(0))
+
+      # GenerateTwoOutputs, "ThirdOutput" output.
+      labels = {monitoring_infos.PCOLLECTION_LABEL :
+                    'ref_PCollection_PCollection_6'}
+      self.assert_has_counter(
+          counters,
+          monitoring_infos.ELEMENT_COUNT_URN, labels, num_source_elems)
+      self.assert_has_distribution(
+          counters, monitoring_infos.SAMPLED_BYTE_SIZE_URN, labels,
+          min=hamcrest.greater_than(0),
+          max=hamcrest.greater_than(0),
+          sum=hamcrest.greater_than(0),
+          count=hamcrest.greater_than(0))
+
+      # Skipping other pcollections due to non-deterministic naming for multiple
+      # outputs.
+      # Flatten/Read, main output.
+      labels = {monitoring_infos.PCOLLECTION_LABEL :
+                    'ref_PCollection_PCollection_7'}
+      self.assert_has_counter(
+          counters,
+          monitoring_infos.ELEMENT_COUNT_URN, labels, 4 * num_source_elems)
+      self.assert_has_distribution(
+          counters, monitoring_infos.SAMPLED_BYTE_SIZE_URN, labels,
+          min=hamcrest.greater_than(0),
+          max=hamcrest.greater_than(0),
+          sum=hamcrest.greater_than(0),
+          count=hamcrest.greater_than(0))
+
+      # PassThrough, main output
+      labels = {monitoring_infos.PCOLLECTION_LABEL :
+                    'ref_PCollection_PCollection_8'}
+      self.assert_has_counter(
+          counters,
+          monitoring_infos.ELEMENT_COUNT_URN, labels, 4 * num_source_elems)
+      self.assert_has_distribution(
+          counters, monitoring_infos.SAMPLED_BYTE_SIZE_URN, labels,
+          min=hamcrest.greater_than(0),
+          max=hamcrest.greater_than(0),
+          sum=hamcrest.greater_than(0),
+          count=hamcrest.greater_than(0))
+
+      # PassThrough2, main output
+      labels = {monitoring_infos.PCOLLECTION_LABEL :
+                    'ref_PCollection_PCollection_9'}
+      self.assert_has_counter(
+          counters,
+          monitoring_infos.ELEMENT_COUNT_URN, labels, num_source_elems)
+      self.assert_has_distribution(
+          counters, monitoring_infos.SAMPLED_BYTE_SIZE_URN, labels,
+          min=hamcrest.greater_than(0),
+          max=hamcrest.greater_than(0),
+          sum=hamcrest.greater_than(0),
+          count=hamcrest.greater_than(0))
+    except:
+      print(res._monitoring_infos_by_stage)
+      raise
 
   def test_non_user_metrics(self):
     p = self.create_pipeline()
-    if not isinstance(p.runner, fn_api_runner.FnApiRunner):
-      # This test is inherited by others that may not support the same
-      # internal way of accessing progress metrics.
-      self.skipTest('Metrics not supported.')
 
     pcoll = p | beam.Create(['a', 'zzz'])
     # pylint: disable=expression-not-assigned
@@ -587,7 +1009,6 @@ class FnApiRunnerTest(unittest.TestCase):
       self.assertEqual(
           1, found, "Did not find exactly 1 metric for %s." % metric_key)
     urns = [
-        monitoring_infos.ELEMENT_COUNT_URN,
         monitoring_infos.START_BUNDLE_MSECS_URN,
         monitoring_infos.PROCESS_BUNDLE_MSECS_URN,
         monitoring_infos.FINISH_BUNDLE_MSECS_URN,
@@ -598,7 +1019,8 @@ class FnApiRunnerTest(unittest.TestCase):
       namespace = split[0]
       name = ':'.join(split[1:])
       assert_counter_exists(
-          all_metrics_via_montoring_infos, namespace, name, step='Create/Read')
+          all_metrics_via_montoring_infos, namespace, name,
+          step='Create/Impulse')
       assert_counter_exists(
           all_metrics_via_montoring_infos, namespace, name, step='MyStep')
 
@@ -609,13 +1031,10 @@ class FnApiRunnerTest(unittest.TestCase):
   @retry(reraise=True, stop=stop_after_attempt(3))
   def test_progress_metrics(self):
     p = self.create_pipeline()
-    if not isinstance(p.runner, fn_api_runner.FnApiRunner):
-      # This test is inherited by others that may not support the same
-      # internal way of accessing progress metrics.
-      self.skipTest('Progress metrics not supported.')
 
     _ = (p
-         | beam.Create([0, 0, 0, 5e-3 * DEFAULT_SAMPLING_PERIOD_MS])
+         | beam.Create(
+             [0, 0, 0, 5e-3 * DEFAULT_SAMPLING_PERIOD_MS], reshuffle=False)
          | beam.Map(time.sleep)
          | beam.Map(lambda x: ('key', x))
          | beam.GroupByKey()
@@ -624,12 +1043,13 @@ class FnApiRunnerTest(unittest.TestCase):
              beam.pvalue.TaggedOutput('once', x),
              beam.pvalue.TaggedOutput('twice', x),
              beam.pvalue.TaggedOutput('twice', x)]))
+
     res = p.run()
     res.wait_until_finish()
 
-    def has_mi_for_ptransform(monitoring_infos, ptransform):
-      for mi in monitoring_infos:
-        if ptransform in mi.labels['PTRANSFORM']:
+    def has_mi_for_ptransform(mon_infos, ptransform):
+      for mi in mon_infos:
+        if ptransform in mi.labels[monitoring_infos.PTRANSFORM_LABEL]:
           return True
       return False
 
@@ -638,13 +1058,13 @@ class FnApiRunnerTest(unittest.TestCase):
       # Test the DEPRECATED legacy metrics
       pregbk_metrics, postgbk_metrics = list(
           res._metrics_by_stage.values())
-      if 'Create/Read' not in pregbk_metrics.ptransforms:
+      if 'Create/Map(decode)' not in pregbk_metrics.ptransforms:
         # The metrics above are actually unordered. Swap.
         pregbk_metrics, postgbk_metrics = postgbk_metrics, pregbk_metrics
       self.assertEqual(
           4,
-          pregbk_metrics.ptransforms['Create/Read']
-          .processed_elements.measured.output_element_counts['out'])
+          pregbk_metrics.ptransforms['Create/Map(decode)']
+          .processed_elements.measured.output_element_counts['None'])
       self.assertEqual(
           4,
           pregbk_metrics.ptransforms['Map(sleep)']
@@ -675,53 +1095,45 @@ class FnApiRunnerTest(unittest.TestCase):
       # Test the new MonitoringInfo monitoring format.
       self.assertEqual(2, len(res._monitoring_infos_by_stage))
       pregbk_mis, postgbk_mis = list(res._monitoring_infos_by_stage.values())
-      if not has_mi_for_ptransform(pregbk_mis, 'Create/Read'):
+
+      if not has_mi_for_ptransform(pregbk_mis, 'Create/Map(decode)'):
         # The monitoring infos above are actually unordered. Swap.
         pregbk_mis, postgbk_mis = postgbk_mis, pregbk_mis
 
-      def assert_has_monitoring_info(
-          monitoring_infos, urn, labels, value=None, ge_value=None):
-        # TODO(ajamato): Consider adding a matcher framework
-        found = 0
-        for m in monitoring_infos:
-          if m.labels == labels and m.urn == urn:
-            if (ge_value is not None and
-                m.metric.counter_data.int64_value >= ge_value):
-              found = found + 1
-            elif (value is not None and
-                  m.metric.counter_data.int64_value == value):
-              found = found + 1
-        ge_value_str = {'ge_value' : ge_value} if ge_value else ''
-        value_str = {'value' : value} if value else ''
-        self.assertEqual(
-            1, found, "Found (%s) Expected only 1 monitoring_info for %s." %
-            (found, (urn, labels, value_str, ge_value_str),))
-
       # pregbk monitoring infos
-      labels = {'PTRANSFORM' : 'Create/Read', 'TAG' : 'out'}
-      assert_has_monitoring_info(
+      labels = {monitoring_infos.PCOLLECTION_LABEL :
+                'ref_PCollection_PCollection_3'}
+      self.assert_has_counter(
           pregbk_mis, monitoring_infos.ELEMENT_COUNT_URN, labels, value=4)
-      labels = {'PTRANSFORM' : 'Map(sleep)', 'TAG' : 'None'}
-      assert_has_monitoring_info(
+      self.assert_has_distribution(
+          pregbk_mis, monitoring_infos.SAMPLED_BYTE_SIZE_URN, labels)
+
+      labels = {monitoring_infos.PCOLLECTION_LABEL :
+                'ref_PCollection_PCollection_4'}
+      self.assert_has_counter(
           pregbk_mis, monitoring_infos.ELEMENT_COUNT_URN, labels, value=4)
-      labels = {'PTRANSFORM' : 'Map(sleep)'}
-      assert_has_monitoring_info(
+      self.assert_has_distribution(
+          pregbk_mis, monitoring_infos.SAMPLED_BYTE_SIZE_URN, labels)
+
+      labels = {monitoring_infos.PTRANSFORM_LABEL : 'Map(sleep)'}
+      self.assert_has_counter(
           pregbk_mis, monitoring_infos.TOTAL_MSECS_URN,
           labels, ge_value=4 * DEFAULT_SAMPLING_PERIOD_MS)
 
       # postgbk monitoring infos
-      labels = {'PTRANSFORM' : 'GroupByKey/Read', 'TAG' : 'None'}
-      assert_has_monitoring_info(
+      labels = {monitoring_infos.PCOLLECTION_LABEL :
+                'ref_PCollection_PCollection_8'}
+      self.assert_has_counter(
           postgbk_mis, monitoring_infos.ELEMENT_COUNT_URN, labels, value=1)
-      labels = {'PTRANSFORM' : 'm_out', 'TAG' : 'None'}
-      assert_has_monitoring_info(
+      self.assert_has_distribution(
+          postgbk_mis, monitoring_infos.SAMPLED_BYTE_SIZE_URN, labels)
+
+      labels = {monitoring_infos.PCOLLECTION_LABEL :
+                'ref_PCollection_PCollection_9'}
+      self.assert_has_counter(
           postgbk_mis, monitoring_infos.ELEMENT_COUNT_URN, labels, value=5)
-      labels = {'PTRANSFORM' : 'm_out', 'TAG' : 'once'}
-      assert_has_monitoring_info(
-          postgbk_mis, monitoring_infos.ELEMENT_COUNT_URN, labels, value=1)
-      labels = {'PTRANSFORM' : 'm_out', 'TAG' : 'twice'}
-      assert_has_monitoring_info(
-          postgbk_mis, monitoring_infos.ELEMENT_COUNT_URN, labels, value=2)
+      self.assert_has_distribution(
+          postgbk_mis, monitoring_infos.SAMPLED_BYTE_SIZE_URN, labels)
     except:
       print(res._monitoring_infos_by_stage)
       raise
@@ -732,18 +1144,59 @@ class FnApiRunnerTestWithGrpc(FnApiRunnerTest):
   def create_pipeline(self):
     return beam.Pipeline(
         runner=fn_api_runner.FnApiRunner(
-            default_environment=beam_runner_api_pb2.Environment(
-                urn=python_urns.EMBEDDED_PYTHON_GRPC)))
+            default_environment=environments.EmbeddedPythonGrpcEnvironment()))
 
 
-class FnApiRunnerTestWithGrpcMultiThreaded(FnApiRunnerTest):
+class FnApiRunnerTestWithDisabledCaching(FnApiRunnerTest):
 
   def create_pipeline(self):
     return beam.Pipeline(
         runner=fn_api_runner.FnApiRunner(
-            default_environment=beam_runner_api_pb2.Environment(
-                urn=python_urns.EMBEDDED_PYTHON_GRPC,
-                payload=b'2')))
+            default_environment=environments.EmbeddedPythonGrpcEnvironment(
+                state_cache_size=0)))
+
+
+class FnApiRunnerTestWithMultiWorkers(FnApiRunnerTest):
+
+  def create_pipeline(self):
+    pipeline_options = PipelineOptions(direct_num_workers=2)
+    p = beam.Pipeline(
+        runner=fn_api_runner.FnApiRunner(),
+        options=pipeline_options)
+    #TODO(BEAM-8444): Fix these tests..
+    p.options.view_as(DebugOptions).experiments.remove('beam_fn_api')
+    return p
+
+  def test_metrics(self):
+    raise unittest.SkipTest("This test is for a single worker only.")
+
+  def test_sdf_with_sdf_initiated_checkpointing(self):
+    raise unittest.SkipTest("This test is for a single worker only.")
+
+  def test_sdf_with_watermark_tracking(self):
+    raise unittest.SkipTest("This test is for a single worker only.")
+
+
+class FnApiRunnerTestWithGrpcAndMultiWorkers(FnApiRunnerTest):
+
+  def create_pipeline(self):
+    pipeline_options = PipelineOptions(direct_num_workers=2)
+    p = beam.Pipeline(
+        runner=fn_api_runner.FnApiRunner(
+            default_environment=environments.EmbeddedPythonGrpcEnvironment()),
+        options=pipeline_options)
+    #TODO(BEAM-8444): Fix these tests..
+    p.options.view_as(DebugOptions).experiments.remove('beam_fn_api')
+    return p
+
+  def test_metrics(self):
+    raise unittest.SkipTest("This test is for a single worker only.")
+
+  def test_sdf_with_sdf_initiated_checkpointing(self):
+    raise unittest.SkipTest("This test is for a single worker only.")
+
+  def test_sdf_with_watermark_tracking(self):
+    raise unittest.SkipTest("This test is for a single worker only.")
 
 
 class FnApiRunnerTestWithBundleRepeat(FnApiRunnerTest):
@@ -751,6 +1204,32 @@ class FnApiRunnerTestWithBundleRepeat(FnApiRunnerTest):
   def create_pipeline(self):
     return beam.Pipeline(
         runner=fn_api_runner.FnApiRunner(bundle_repeat=3))
+
+  def test_register_finalizations(self):
+    raise unittest.SkipTest("TODO: Avoid bundle finalizations on repeat.")
+
+
+class FnApiRunnerTestWithBundleRepeatAndMultiWorkers(FnApiRunnerTest):
+
+  def create_pipeline(self):
+    pipeline_options = PipelineOptions(direct_num_workers=2)
+    p = beam.Pipeline(
+        runner=fn_api_runner.FnApiRunner(bundle_repeat=3),
+        options=pipeline_options)
+    p.options.view_as(DebugOptions).experiments.remove('beam_fn_api')
+    return p
+
+  def test_register_finalizations(self):
+    raise unittest.SkipTest("TODO: Avoid bundle finalizations on repeat.")
+
+  def test_metrics(self):
+    raise unittest.SkipTest("This test is for a single worker only.")
+
+  def test_sdf_with_sdf_initiated_checkpointing(self):
+    raise unittest.SkipTest("This test is for a single worker only.")
+
+  def test_sdf_with_watermark_tracking(self):
+    raise unittest.SkipTest("This test is for a single worker only.")
 
 
 class FnApiRunnerSplitTest(unittest.TestCase):
@@ -760,8 +1239,7 @@ class FnApiRunnerSplitTest(unittest.TestCase):
     # to the bundle process request.
     return beam.Pipeline(
         runner=fn_api_runner.FnApiRunner(
-            default_environment=beam_runner_api_pb2.Environment(
-                urn=python_urns.EMBEDDED_PYTHON_GRPC)))
+            default_environment=environments.EmbeddedPythonGrpcEnvironment()))
 
   def test_checkpoint(self):
     # This split manager will get re-invoked on each smaller split,
@@ -830,12 +1308,13 @@ class FnApiRunnerSplitTest(unittest.TestCase):
     element_counter = ElementCounter()
 
     def split_manager(num_elements):
-      element_counter.reset()
-      breakpoint = element_counter.set_breakpoint(1)
-      yield
-      breakpoint.wait()
-      yield 0
-      breakpoint.clear()
+      if num_elements > 0:
+        element_counter.reset()
+        breakpoint = element_counter.set_breakpoint(1)
+        yield
+        breakpoint.wait()
+        yield 0
+        breakpoint.clear()
 
     # Everything should be perfectly split.
     elements = [2, 3]
@@ -849,7 +1328,7 @@ class FnApiRunnerSplitTest(unittest.TestCase):
     is_first_bundle = [True]  # emulate nonlocal for Python 2
 
     def split_manager(num_elements):
-      if is_first_bundle:
+      if is_first_bundle and num_elements > 0:
         del is_first_bundle[:]
         breakpoint = element_counter.set_breakpoint(1)
         yield
@@ -879,20 +1358,21 @@ class FnApiRunnerSplitTest(unittest.TestCase):
     element_counter = ElementCounter()
 
     def split_manager(num_elements):
-      element_counter.reset()
-      wait_for = r.randrange(num_elements)
-      breakpoint = element_counter.set_breakpoint(wait_for)
-      yield
-      breakpoint.wait()
-      yield r.random()
-      yield r.random()
-      breakpoint.clear()
+      if num_elements > 0:
+        element_counter.reset()
+        wait_for = r.randrange(num_elements)
+        breakpoint = element_counter.set_breakpoint(wait_for)
+        yield
+        breakpoint.wait()
+        yield r.random()
+        yield r.random()
+        breakpoint.clear()
 
     try:
       elements = [r.randrange(5, 10) for _ in range(5)]
       self.run_sdf_split_pipeline(split_manager, elements, element_counter)
     except Exception:
-      logging.error('test_split_crazy_sdf.seed = %s', seed)
+      _LOGGER.error('test_split_crazy_sdf.seed = %s', seed)
       raise
 
   def run_sdf_split_pipeline(
@@ -901,25 +1381,29 @@ class FnApiRunnerSplitTest(unittest.TestCase):
 
     class EnumerateProvider(beam.transforms.core.RestrictionProvider):
       def initial_restriction(self, element):
-        return (0, element)
+        return restriction_trackers.OffsetRange(0, element)
 
       def create_tracker(self, restriction):
-        return restriction_trackers.OffsetRestrictionTracker(
-            *restriction)
+        return restriction_trackers.OffsetRestrictionTracker(restriction)
 
       def split(self, element, restriction):
         # Don't do any initial splitting to simplify test.
         return [restriction]
 
+      def restriction_size(self, element, restriction):
+        return restriction.size()
+
     class EnumerateSdf(beam.DoFn):
-      def process(self, element, restriction_tracker=EnumerateProvider()):
+      def process(
+          self,
+          element,
+          restriction_tracker=beam.DoFn.RestrictionParam(EnumerateProvider())):
         to_emit = []
-        for k in range(*restriction_tracker.current_restriction()):
-          if restriction_tracker.try_claim(k):
-            to_emit.append((element, k))
-            element_counter.increment()
-          else:
-            break
+        cur = restriction_tracker.current_restriction().start
+        while restriction_tracker.try_claim(cur):
+          to_emit.append((element, cur))
+          element_counter.increment()
+          cur += 1
         # Emitting in batches for tighter testing.
         yield to_emit
 
@@ -929,7 +1413,7 @@ class FnApiRunnerSplitTest(unittest.TestCase):
       with self.create_pipeline() as p:
         grouped = (
             p
-            | beam.Create(elements)
+            | beam.Create(elements, reshuffle=False)
             | 'SDF' >> beam.ParDo(EnumerateSdf()))
         flat = grouped | beam.FlatMap(lambda x: x)
         assert_that(flat, equal_to(expected))
@@ -1002,11 +1486,105 @@ class ElementCounter(object):
     return _unpickle_element_counter, (name,)
 
 
-_pickled_element_counters = {}
+_pickled_element_counters = {}  # type: Dict[str, ElementCounter]
 
 
 def _unpickle_element_counter(name):
   return _pickled_element_counters[name]
+
+
+class EventRecorder(object):
+  """Used to be registered as a callback in bundle finalization.
+
+  The reason why records are written into a tmp file is, the in-memory dataset
+  cannot keep callback records when passing into one DoFn.
+  """
+  def __init__(self, tmp_dir):
+    self.tmp_dir = os.path.join(tmp_dir, uuid.uuid4().hex)
+    os.mkdir(self.tmp_dir)
+
+  def record(self, content):
+    file_path = os.path.join(self.tmp_dir, uuid.uuid4().hex + '.txt')
+    with open(file_path, 'w') as f:
+      f.write(content)
+
+  def events(self):
+    content = []
+    record_files = [f for f in os.listdir(self.tmp_dir) if os.path.isfile(
+        os.path.join(self.tmp_dir, f))]
+    for file in record_files:
+      with open(os.path.join(self.tmp_dir, file), 'r') as f:
+        content.append(f.read())
+    return sorted(content)
+
+  def cleanup(self):
+    shutil.rmtree(self.tmp_dir)
+
+
+class ExpandStringsProvider(beam.transforms.core.RestrictionProvider):
+  """A RestrictionProvider that used for sdf related tests."""
+  def initial_restriction(self, element):
+    return restriction_trackers.OffsetRange(0, len(element))
+
+  def create_tracker(self, restriction):
+    return restriction_trackers.OffsetRestrictionTracker(restriction)
+
+  def split(self, element, restriction):
+    desired_bundle_size = restriction.size() // 2
+    return restriction.split(desired_bundle_size)
+
+  def restriction_size(self, element, restriction):
+    return restriction.size()
+
+
+class FnApiRunnerSplitTestWithMultiWorkers(FnApiRunnerSplitTest):
+
+  def create_pipeline(self):
+    pipeline_options = PipelineOptions(direct_num_workers=2)
+    p = beam.Pipeline(
+        runner=fn_api_runner.FnApiRunner(
+            default_environment=environments.EmbeddedPythonGrpcEnvironment()),
+        options=pipeline_options)
+    #TODO(BEAM-8444): Fix these tests..
+    p.options.view_as(DebugOptions).experiments.remove('beam_fn_api')
+    return p
+
+  def test_checkpoint(self):
+    raise unittest.SkipTest("This test is for a single worker only.")
+
+  def test_split_half(self):
+    raise unittest.SkipTest("This test is for a single worker only.")
+
+
+class FnApiBasedLullLoggingTest(unittest.TestCase):
+  def create_pipeline(self):
+    return beam.Pipeline(
+        runner=fn_api_runner.FnApiRunner(
+            default_environment=environments.EmbeddedPythonGrpcEnvironment(),
+            progress_request_frequency=0.5))
+
+  def test_lull_logging(self):
+
+    # TODO(BEAM-1251): Remove this test skip after dropping Py 2 support.
+    if sys.version_info < (3, 4):
+      self.skipTest('Log-based assertions are supported after Python 3.4')
+    try:
+      utils.check_compiled('apache_beam.runners.worker.opcounters')
+    except RuntimeError:
+      self.skipTest('Cython is not available')
+
+    with self.assertLogs(level='WARNING') as logs:
+      with self.create_pipeline() as p:
+        sdk_worker.DEFAULT_LOG_LULL_TIMEOUT_NS = 1000 * 1000  # Lull after 1 ms
+
+        _ = (p
+             | beam.Create([1])
+             | beam.Map(time.sleep))
+
+    self.assertRegex(
+        ''.join(logs.output),
+        '.*There has been a processing lull of over.*',
+        'Unable to find a lull logged for this job.')
 
 
 if __name__ == '__main__':

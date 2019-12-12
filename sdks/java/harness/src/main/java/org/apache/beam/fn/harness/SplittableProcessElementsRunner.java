@@ -17,7 +17,7 @@
  */
 package org.apache.beam.fn.harness;
 
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkArgument;
 
 import com.google.auto.service.AutoService;
 import java.io.IOException;
@@ -49,11 +49,11 @@ import org.apache.beam.sdk.util.WindowedValue;
 import org.apache.beam.sdk.util.WindowedValue.FullWindowedValueCoder;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.TupleTag;
-import org.apache.beam.vendor.grpc.v1p13p1.com.google.protobuf.ByteString;
-import org.apache.beam.vendor.grpc.v1p13p1.com.google.protobuf.util.Timestamps;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableList;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableMap;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterables;
+import org.apache.beam.vendor.grpc.v1p21p0.com.google.protobuf.ByteString;
+import org.apache.beam.vendor.grpc.v1p21p0.com.google.protobuf.util.Timestamps;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableList;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Iterables;
 import org.joda.time.Duration;
 import org.joda.time.Instant;
 
@@ -156,8 +156,7 @@ public class SplittableProcessElementsRunner<InputT, RestrictionT, OutputT>
     processElementTyped(elem);
   }
 
-  private <PositionT, TrackerT extends RestrictionTracker<RestrictionT, PositionT>>
-      void processElementTyped(WindowedValue<KV<InputT, RestrictionT>> elem) {
+  private <PositionT> void processElementTyped(WindowedValue<KV<InputT, RestrictionT>> elem) {
     checkArgument(
         elem.getWindows().size() == 1,
         "SPLITTABLE_PROCESS_ELEMENTS expects its input to be in 1 window, but got %s windows",
@@ -175,9 +174,9 @@ public class SplittableProcessElementsRunner<InputT, RestrictionT, OutputT>
             (Coder<BoundedWindow>) context.windowCoder,
             () -> elem,
             () -> window);
-    TrackerT tracker = doFnInvoker.invokeNewTracker(elem.getValue().getValue());
-    OutputAndTimeBoundedSplittableProcessElementInvoker<
-            InputT, OutputT, RestrictionT, PositionT, TrackerT>
+    RestrictionTracker<RestrictionT, PositionT> tracker =
+        doFnInvoker.invokeNewTracker(elem.getValue().getValue());
+    OutputAndTimeBoundedSplittableProcessElementInvoker<InputT, OutputT, RestrictionT, PositionT>
         processElementInvoker =
             new OutputAndTimeBoundedSplittableProcessElementInvoker<>(
                 context.doFn,
@@ -213,7 +212,7 @@ public class SplittableProcessElementsRunner<InputT, RestrictionT, OutputT>
                 executor,
                 10000,
                 Duration.standardSeconds(10));
-    SplittableProcessElementInvoker<InputT, OutputT, RestrictionT, TrackerT>.Result result =
+    SplittableProcessElementInvoker<InputT, OutputT, RestrictionT, PositionT>.Result result =
         processElementInvoker.invokeProcessElement(doFnInvoker, element, tracker);
     this.stateAccessor = null;
 
@@ -232,13 +231,13 @@ public class SplittableProcessElementsRunner<InputT, RestrictionT, OutputT>
       }
       BundleApplication primaryApplication =
           BundleApplication.newBuilder()
-              .setPtransformId(context.ptransformId)
+              .setTransformId(context.ptransformId)
               .setInputId(mainInputId)
               .setElement(primaryBytes.toByteString())
               .build();
       BundleApplication residualApplication =
           BundleApplication.newBuilder()
-              .setPtransformId(context.ptransformId)
+              .setTransformId(context.ptransformId)
               .setInputId(mainInputId)
               .setElement(residualBytes.toByteString())
               .build();
@@ -264,6 +263,11 @@ public class SplittableProcessElementsRunner<InputT, RestrictionT, OutputT>
   @Override
   public void finishBundle() {
     doFnInvoker.invokeFinishBundle(finishBundleContext);
+  }
+
+  @Override
+  public void tearDown() {
+    doFnInvoker.invokeTeardown();
   }
 
   /** Outputs the given element to the specified set of consumers wrapping any exceptions. */

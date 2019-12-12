@@ -55,6 +55,7 @@ import org.apache.beam.sdk.transforms.reflect.DoFnInvoker.FakeArgumentProvider;
 import org.apache.beam.sdk.transforms.reflect.testhelper.DoFnInvokersTestHelper;
 import org.apache.beam.sdk.transforms.splittabledofn.HasDefaultTracker;
 import org.apache.beam.sdk.transforms.splittabledofn.RestrictionTracker;
+import org.apache.beam.sdk.transforms.splittabledofn.SplitResult;
 import org.apache.beam.sdk.transforms.windowing.BoundedWindow;
 import org.apache.beam.sdk.transforms.windowing.IntervalWindow;
 import org.apache.beam.sdk.util.UserCodeException;
@@ -317,8 +318,8 @@ public class DoFnInvokersTest {
   public void testDoFnWithReturn() throws Exception {
     class MockFn extends DoFn<String, String> {
       @DoFn.ProcessElement
-      public ProcessContinuation processElement(ProcessContext c, SomeRestrictionTracker tracker)
-          throws Exception {
+      public ProcessContinuation processElement(
+          ProcessContext c, RestrictionTracker<SomeRestriction, Void> tracker) throws Exception {
         return null;
       }
 
@@ -394,7 +395,8 @@ public class DoFnInvokersTest {
   /** Public so Mockito can do "delegatesTo()" in the test below. */
   public static class MockFn extends DoFn<String, String> {
     @ProcessElement
-    public ProcessContinuation processElement(ProcessContext c, SomeRestrictionTracker tracker) {
+    public ProcessContinuation processElement(
+        ProcessContext c, RestrictionTracker<SomeRestriction, Void> tracker) {
       return null;
     }
 
@@ -495,7 +497,7 @@ public class DoFnInvokersTest {
   private static class DefaultTracker
       extends RestrictionTracker<RestrictionWithDefaultTracker, Void> {
     @Override
-    protected boolean tryClaimImpl(Void position) {
+    public boolean tryClaim(Void position) {
       throw new UnsupportedOperationException();
     }
 
@@ -505,7 +507,7 @@ public class DoFnInvokersTest {
     }
 
     @Override
-    public RestrictionWithDefaultTracker checkpoint() {
+    public SplitResult<RestrictionWithDefaultTracker> trySplit(double fractionOfRemainder) {
       throw new UnsupportedOperationException();
     }
 
@@ -531,7 +533,8 @@ public class DoFnInvokersTest {
   public void testSplittableDoFnDefaultMethods() throws Exception {
     class MockFn extends DoFn<String, String> {
       @ProcessElement
-      public void processElement(ProcessContext c, DefaultTracker tracker) {}
+      public void processElement(
+          ProcessContext c, RestrictionTracker<RestrictionWithDefaultTracker, Void> tracker) {}
 
       @GetInitialRestriction
       public RestrictionWithDefaultTracker getInitialRestriction(String element) {
@@ -740,7 +743,8 @@ public class DoFnInvokersTest {
             new DoFn<Integer, Integer>() {
               @ProcessElement
               public ProcessContinuation processElement(
-                  @SuppressWarnings("unused") ProcessContext c, SomeRestrictionTracker tracker) {
+                  @SuppressWarnings("unused") ProcessContext c,
+                  RestrictionTracker<SomeRestriction, Void> tracker) {
                 throw new IllegalArgumentException("bogus");
               }
 

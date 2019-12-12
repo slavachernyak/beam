@@ -24,15 +24,20 @@ import shutil
 import sys
 import tempfile
 import unittest
+from typing import List
 
 import mock
+import pytest
 
 from apache_beam.io.filesystems import FileSystems
+from apache_beam.options.pipeline_options import DebugOptions
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.options.pipeline_options import SetupOptions
 from apache_beam.runners.dataflow.internal import names
 from apache_beam.runners.internal import names as shared_names
 from apache_beam.runners.portability import stager
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class StagerTest(unittest.TestCase):
@@ -59,6 +64,26 @@ class StagerTest(unittest.TestCase):
     with open(path, 'w') as f:
       f.write(contents)
       return f.name
+
+  # We can not rely on actual remote file systems paths hence making
+  # '/tmp/remote/' a new remote path.
+  def is_remote_path(self, path):
+    return path.startswith('/tmp/remote/')
+
+  remote_copied_files = []  # type: List[str]
+
+  def file_copy(self, from_path, to_path):
+    if self.is_remote_path(from_path):
+      self.remote_copied_files.append(from_path)
+      _, from_name = os.path.split(from_path)
+      if os.path.isdir(to_path):
+        to_path = os.path.join(to_path, from_name)
+      self.create_temp_file(to_path, 'nothing')
+      _LOGGER.info('Fake copied remote file: %s to %s', from_path, to_path)
+    elif self.is_remote_path(to_path):
+      _LOGGER.info('Faking upload_file(%s, %s)', from_path, to_path)
+    else:
+      shutil.copyfile(from_path, to_path)
 
   def populate_requirements_cache(self, requirements_file, cache_dir):
     _ = requirements_file
@@ -139,6 +164,8 @@ class StagerTest(unittest.TestCase):
                      self.stager.stage_job_resources(
                          options, staging_location=staging_dir)[1])
 
+  # xdist adds unpicklable modules to the main session.
+  @pytest.mark.no_xdist
   def test_with_main_session(self):
     staging_dir = self.make_temp_dir()
     options = PipelineOptions()
@@ -422,14 +449,9 @@ class StagerTest(unittest.TestCase):
     self.update_options(options)
     options.view_as(SetupOptions).sdk_location = sdk_location
 
-    # We can not rely on actual remote file systems paths hence making
-    # '/tmp/remote/' a new remote path.
-    def is_remote_path(path):
-      return path.startswith('/tmp/remote/')
-
     with mock.patch(
         'apache_beam.runners.portability.stager_test'
-        '.stager.Stager._is_remote_path', staticmethod(is_remote_path)):
+        '.stager.Stager._is_remote_path', staticmethod(self.is_remote_path)):
       self.assertEqual([sdk_filename],
                        self.stager.stage_job_resources(
                            options, staging_location=staging_dir)[1])
@@ -477,32 +499,14 @@ class StagerTest(unittest.TestCase):
         os.path.join(source_dir, 'whl.whl'), '/tmp/remote/remote_file.tar.gz'
     ]
 
-    remote_copied_files = []
-
-    # We can not rely on actual remote file systems paths hence making
-    # '/tmp/remote/' a new remote path.
-    def is_remote_path(path):
-      return path.startswith('/tmp/remote/')
-
-    def file_copy(from_path, to_path):
-      if is_remote_path(from_path):
-        remote_copied_files.append(from_path)
-        _, from_name = os.path.split(from_path)
-        if os.path.isdir(to_path):
-          to_path = os.path.join(to_path, from_name)
-        self.create_temp_file(to_path, 'nothing')
-        logging.info('Fake copied remote file: %s to %s', from_path, to_path)
-      elif is_remote_path(to_path):
-        logging.info('Faking upload_file(%s, %s)', from_path, to_path)
-      else:
-        shutil.copyfile(from_path, to_path)
+    self.remote_copied_files = []
 
     with mock.patch(
         'apache_beam.runners.portability.stager_test'
-        '.stager.Stager._download_file', staticmethod(file_copy)):
+        '.stager.Stager._download_file', staticmethod(self.file_copy)):
       with mock.patch(
           'apache_beam.runners.portability.stager_test'
-          '.stager.Stager._is_remote_path', staticmethod(is_remote_path)):
+          '.stager.Stager._is_remote_path', staticmethod(self.is_remote_path)):
         self.assertEqual([
             'abc.tar.gz', 'xyz.tar.gz', 'xyz2.tar', 'whl.whl',
             'remote_file.tar.gz', stager.EXTRA_PACKAGES_FILE
@@ -513,7 +517,8 @@ class StagerTest(unittest.TestCase):
           'abc.tar.gz\n', 'xyz.tar.gz\n', 'xyz2.tar\n', 'whl.whl\n',
           'remote_file.tar.gz\n'
       ], f.readlines())
-    self.assertEqual(['/tmp/remote/remote_file.tar.gz'], remote_copied_files)
+    self.assertEqual(
+        ['/tmp/remote/remote_file.tar.gz'], self.remote_copied_files)
 
   def test_with_extra_packages_missing_files(self):
     staging_dir = self.make_temp_dir()
@@ -546,11 +551,75 @@ class StagerTest(unittest.TestCase):
         '".tar", ".tar.gz", ".whl" or ".zip" '
         'instead of %s' % os.path.join(source_dir, 'abc.tgz'))
 
+  def test_with_jar_packages_missing_files(self):
+    staging_dir = self.make_temp_dir()
+    with self.assertRaises(RuntimeError) as cm:
+
+      options = PipelineOptions()
+      self.update_options(options)
+      options.view_as(DebugOptions).experiments = [
+          'jar_packages=nosuchfile.jar'
+      ]
+      self.stager.stage_job_resources(options, staging_location=staging_dir)
+    self.assertEqual(
+        cm.exception.args[0],
+        'The file %s cannot be found. It was specified in the '
+        '--experiment=\'jar_packages=\' command line option.' %
+        'nosuchfile.jar')
+
+  def test_with_jar_packages_invalid_file_name(self):
+    staging_dir = self.make_temp_dir()
+    source_dir = self.make_temp_dir()
+    self.create_temp_file(os.path.join(source_dir, 'abc.tgz'), 'nothing')
+    with self.assertRaises(RuntimeError) as cm:
+      options = PipelineOptions()
+      self.update_options(options)
+      options.view_as(DebugOptions).experiments = [
+          'jar_packages='+os.path.join(source_dir, 'abc.tgz')
+      ]
+      self.stager.stage_job_resources(options, staging_location=staging_dir)
+    self.assertEqual(
+        cm.exception.args[0],
+        'The --experiment=\'jar_packages=\' option expects a full path ending '
+        'with ".jar" instead of %s' % os.path.join(source_dir, 'abc.tgz'))
+
+  def test_with_jar_packages(self):
+    staging_dir = self.make_temp_dir()
+    source_dir = self.make_temp_dir()
+    self.create_temp_file(os.path.join(source_dir, 'abc.jar'), 'nothing')
+    self.create_temp_file(os.path.join(source_dir, 'xyz.jar'), 'nothing')
+    self.create_temp_file(os.path.join(source_dir, 'ijk.jar'), 'nothing')
+
+    options = PipelineOptions()
+    self.update_options(options)
+    options.view_as(DebugOptions).experiments = [
+        'jar_packages=%s,%s,%s,%s' % (
+            os.path.join(source_dir, 'abc.jar'),
+            os.path.join(source_dir, 'xyz.jar'),
+            os.path.join(source_dir, 'ijk.jar'),
+            '/tmp/remote/remote.jar'
+        )
+    ]
+
+    self.remote_copied_files = []
+
+    with mock.patch(
+        'apache_beam.runners.portability.stager_test'
+        '.stager.Stager._download_file', staticmethod(self.file_copy)):
+      with mock.patch(
+          'apache_beam.runners.portability.stager_test'
+          '.stager.Stager._is_remote_path', staticmethod(self.is_remote_path)):
+        self.assertEqual([
+            'abc.jar', 'xyz.jar', 'ijk.jar', 'remote.jar'
+        ], self.stager.stage_job_resources(
+            options, staging_location=staging_dir)[1])
+    self.assertEqual(['/tmp/remote/remote.jar'], self.remote_copied_files)
+
 
 class TestStager(stager.Stager):
 
   def stage_artifact(self, local_path_to_artifact, artifact_name):
-    logging.info('File copy from %s to %s.', local_path_to_artifact,
+    _LOGGER.info('File copy from %s to %s.', local_path_to_artifact,
                  artifact_name)
     shutil.copyfile(local_path_to_artifact, artifact_name)
 

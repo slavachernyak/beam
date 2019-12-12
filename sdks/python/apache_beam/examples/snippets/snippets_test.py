@@ -26,6 +26,7 @@ import logging
 import os
 import sys
 import tempfile
+import typing
 import unittest
 import uuid
 from builtins import map
@@ -321,10 +322,10 @@ class TypeHintsTest(unittest.TestCase):
     # One can assert outputs and apply them to transforms as well.
     # Helps document the contract and checks it at pipeline construction time.
     # [START type_hints_transform]
-    T = beam.typehints.TypeVariable('T')
+    T = typing.TypeVar('T')
 
     @beam.typehints.with_input_types(T)
-    @beam.typehints.with_output_types(beam.typehints.Tuple[int, T])
+    @beam.typehints.with_output_types(typing.Tuple[int, T])
     class MyTransform(beam.PTransform):
       def expand(self, pcoll):
         return pcoll | beam.Map(lambda x: (len(x), x))
@@ -335,7 +336,7 @@ class TypeHintsTest(unittest.TestCase):
     # pylint: disable=expression-not-assigned
     with self.assertRaises(typehints.TypeCheckError):
       words_with_lens | beam.Map(lambda x: x).with_input_types(
-          beam.typehints.Tuple[int, int])
+          typing.Tuple[int, int])
 
   def test_runtime_checks_off(self):
     # We do not run the following pipeline, as it has incorrect type
@@ -391,7 +392,7 @@ class TypeHintsTest(unittest.TestCase):
           lines
           | beam.Map(parse_player_and_score)
           | beam.CombinePerKey(sum).with_input_types(
-              beam.typehints.Tuple[Player, int]))
+              typing.Tuple[Player, int]))
       # [END type_hints_deterministic_key]
 
       assert_that(
@@ -527,11 +528,12 @@ class SnippetsTest(unittest.TestCase):
   def test_model_pcollection(self):
     temp_path = self.create_temp_file()
     snippets.model_pcollection(['--output=%s' % temp_path])
-    self.assertEqual(self.get_output(temp_path, sorted_output=False), [
+    self.assertEqual(self.get_output(temp_path), [
+        'Or to take arms against a sea of troubles, ',
+        'The slings and arrows of outrageous fortune, ',
         'To be, or not to be: that is the question: ',
         'Whether \'tis nobler in the mind to suffer ',
-        'The slings and arrows of outrageous fortune, ',
-        'Or to take arms against a sea of troubles, '])
+    ])
 
   def test_construct_pipeline(self):
     temp_path = self.create_temp_file(

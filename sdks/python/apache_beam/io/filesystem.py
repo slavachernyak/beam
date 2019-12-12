@@ -35,6 +35,8 @@ import time
 import zlib
 from builtins import object
 from builtins import zip
+from typing import BinaryIO  # pylint: disable=unused-import
+from typing import Tuple
 
 from future.utils import with_metaclass
 from past.builtins import long
@@ -207,34 +209,25 @@ class CompressedFile(object):
                                  ) < num_bytes:
       # Continue reading from the underlying file object until enough bytes are
       # available, or EOF is reached.
-      buf = self._file.read(self._read_size)
+      if not self._decompressor.unused_data:
+        buf = self._file.read(self._read_size)
+      else:
+        # Any uncompressed data at the end of the stream of a gzip or bzip2
+        # file that is not corrupted points to a concatenated compressed
+        # file. We read concatenated files by recursively creating decompressor
+        # objects for the unused compressed data.
+        buf = self._decompressor.unused_data
+        self._initialize_decompressor()
       if buf:
         decompressed = self._decompressor.decompress(buf)
         del buf  # Free up some possibly large and no-longer-needed memory.
         self._read_buffer.write(decompressed)
       else:
         # EOF of current stream reached.
-        #
-        # Any uncompressed data at the end of the stream of a gzip or bzip2
-        # file that is not corrupted points to a concatenated compressed
-        # file. We read concatenated files by recursively creating decompressor
-        # objects for the unused compressed data.
         if (self._compression_type == CompressionTypes.BZIP2 or
             self._compression_type == CompressionTypes.DEFLATE or
             self._compression_type == CompressionTypes.GZIP):
-          if self._decompressor.unused_data != b'':
-            buf = self._decompressor.unused_data
-
-            if self._compression_type == CompressionTypes.BZIP2:
-              self._decompressor = bz2.BZ2Decompressor()
-            elif self._compression_type == CompressionTypes.DEFLATE:
-              self._decompressor = zlib.decompressobj()
-            else:
-              self._decompressor = zlib.decompressobj(self._gzip_mask)
-
-            decompressed = self._decompressor.decompress(buf)
-            self._read_buffer.write(decompressed)
-            continue
+          pass
         else:
           # Deflate, Gzip and bzip2 formats do not require flushing
           # remaining data in the decompressor into the read buffer when
@@ -361,15 +354,16 @@ class CompressedFile(object):
     elif whence == os.SEEK_END:
       # Determine and cache the uncompressed size of the file
       if not self._uncompressed_size:
-        logger.warn("Seeking relative from end of file is requested. "
-                    "Need to decompress the whole file once to determine "
-                    "its size. This might take a while...")
+        logger.warning("Seeking relative from end of file is requested. "
+                       "Need to decompress the whole file once to determine "
+                       "its size. This might take a while...")
         uncompress_start_time = time.time()
         while self.read(self._read_size):
           pass
         uncompress_end_time = time.time()
-        logger.warn("Full file decompression for seek from end took %.2f secs",
-                    (uncompress_end_time - uncompress_start_time))
+        logger.warning("Full file decompression for seek "
+                       "from end took %.2f secs",
+                       (uncompress_end_time - uncompress_start_time))
         self._uncompressed_size = self._uncompressed_position
       absolute_offset = self._uncompressed_size + offset
     else:
@@ -400,8 +394,7 @@ class CompressedFile(object):
 
 
 class FileMetadata(object):
-  """Metadata about a file path that is the output of FileSystem.match
-  """
+  """Metadata about a file path that is the output of FileSystem.match."""
   def __init__(self, path, size_in_bytes):
     assert isinstance(path, (str, unicode)) and path, "Path should be a string"
     assert isinstance(size_in_bytes, (int, long)) and size_in_bytes >= 0, \
@@ -430,7 +423,7 @@ class FileMetadata(object):
 
 class MatchResult(object):
   """Result from the ``FileSystem`` match operation which contains the list
-   of matched FileMetadata.
+   of matched ``FileMetadata``.
   """
   def __init__(self, pattern, metadata_list):
     self.metadata_list = metadata_list
@@ -454,7 +447,7 @@ class BeamIOError(IOError):
     self.exception_details = exception_details
 
 
-class FileSystem(with_metaclass(abc.ABCMeta, BeamPlugin)):
+class FileSystem(with_metaclass(abc.ABCMeta, BeamPlugin)):  # type: ignore[misc]
   """A class that defines the functions that can be performed on a filesystem.
 
   All methods are abstract and they are for file system providers to
@@ -487,6 +480,7 @@ class FileSystem(with_metaclass(abc.ABCMeta, BeamPlugin)):
 
   @abc.abstractmethod
   def join(self, basepath, *paths):
+    # type: (str, *str) -> str
     """Join two or more pathname components for the filesystem
 
     Args:
@@ -499,6 +493,7 @@ class FileSystem(with_metaclass(abc.ABCMeta, BeamPlugin)):
 
   @abc.abstractmethod
   def split(self, path):
+    # type: (str) -> Tuple[str, str]
     """Splits the given path into two parts.
 
     Splits the path into a pair (head, tail) such that tail contains the last
@@ -660,7 +655,7 @@ class FileSystem(with_metaclass(abc.ABCMeta, BeamPlugin)):
     See Also:
       :meth:`translate_pattern`
 
-    Patterns ending with '/' will be appended with '*'.
+    Patterns ending with '/' or '\\' will be appended with '*'.
 
     Args:
       patterns: list of string for the file path pattern to match against
@@ -679,7 +674,7 @@ class FileSystem(with_metaclass(abc.ABCMeta, BeamPlugin)):
 
     def _match(pattern, limit):
       """Find all matching paths to the pattern provided."""
-      if pattern.endswith('/'):
+      if pattern.endswith('/') or pattern.endswith('\\'):
         pattern += '*'
       # Get the part of the pattern before the first globbing character.
       # For example scheme://path/foo* will become scheme://path/foo for
@@ -726,6 +721,7 @@ class FileSystem(with_metaclass(abc.ABCMeta, BeamPlugin)):
   @abc.abstractmethod
   def create(self, path, mime_type='application/octet-stream',
              compression_type=CompressionTypes.AUTO):
+    # type: (...) -> BinaryIO
     """Returns a write channel for the given file path.
 
     Args:
@@ -740,6 +736,7 @@ class FileSystem(with_metaclass(abc.ABCMeta, BeamPlugin)):
   @abc.abstractmethod
   def open(self, path, mime_type='application/octet-stream',
            compression_type=CompressionTypes.AUTO):
+    # type: (...) -> BinaryIO
     """Returns a read channel for the given file path.
 
     Args:
@@ -780,6 +777,7 @@ class FileSystem(with_metaclass(abc.ABCMeta, BeamPlugin)):
 
   @abc.abstractmethod
   def exists(self, path):
+    # type: (str) -> bool
     """Check if the provided path exists on the FileSystem.
 
     Args:
@@ -791,6 +789,7 @@ class FileSystem(with_metaclass(abc.ABCMeta, BeamPlugin)):
 
   @abc.abstractmethod
   def size(self, path):
+    # type: (str) -> int
     """Get size in bytes of a file on the FileSystem.
 
     Args:

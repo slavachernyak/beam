@@ -63,7 +63,7 @@ class TfIdf(beam.PTransform):
     total_documents = (
         uri_to_content
         | 'GetUris 1' >> beam.Keys()
-        | 'GetUniqueUris' >> beam.RemoveDuplicates()
+        | 'GetUniqueUris' >> beam.Distinct()
         | 'CountUris' >> beam.combiners.Count.Globally())
 
     # Create a collection of pairs mapping a URI to each of the words
@@ -81,7 +81,7 @@ class TfIdf(beam.PTransform):
     # in which it appears.
     word_to_doc_count = (
         uri_to_words
-        | 'GetUniqueWordsPerDoc' >> beam.RemoveDuplicates()
+        | 'GetUniqueWordsPerDoc' >> beam.Distinct()
         | 'GetWords' >> beam.Values()
         | 'CountDocsPerWord' >> beam.combiners.Count.PerElement())
 
@@ -187,7 +187,7 @@ class TfIdf(beam.PTransform):
     return word_to_uri_and_tfidf
 
 
-def run(argv=None):
+def run(argv=None, save_main_session=True):
   """Main entry point; defines and runs the tfidf pipeline."""
   parser = argparse.ArgumentParser()
   parser.add_argument('--uris',
@@ -200,7 +200,7 @@ def run(argv=None):
   # We use the save_main_session option because one or more DoFn's in this
   # workflow rely on global context (e.g., a module imported at module level).
   pipeline_options = PipelineOptions(pipeline_args)
-  pipeline_options.view_as(SetupOptions).save_main_session = True
+  pipeline_options.view_as(SetupOptions).save_main_session = save_main_session
   with beam.Pipeline(options=pipeline_options) as p:
 
     # Read documents specified by the uris command line option.

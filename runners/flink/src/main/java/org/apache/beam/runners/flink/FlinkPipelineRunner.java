@@ -17,11 +17,12 @@
  */
 package org.apache.beam.runners.flink;
 
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.beam.runners.core.construction.PipelineResources.detectClassPathResourcesToStage;
+import static org.apache.beam.runners.fnexecution.translation.PipelineTranslatorUtils.hasUnboundedPCollections;
 
-import java.util.Collection;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
+import java.util.UUID;
 import javax.annotation.Nullable;
 import org.apache.beam.model.pipeline.v1.RunnerApi;
 import org.apache.beam.model.pipeline.v1.RunnerApi.Pipeline;
@@ -29,13 +30,28 @@ import org.apache.beam.runners.core.construction.PTransformTranslation;
 import org.apache.beam.runners.core.construction.PipelineOptionsTranslation;
 import org.apache.beam.runners.core.construction.graph.ExecutableStage;
 import org.apache.beam.runners.core.construction.graph.GreedyPipelineFuser;
+import org.apache.beam.runners.core.construction.graph.PipelineTrimmer;
+import org.apache.beam.runners.core.construction.graph.ProtoOverrides;
+import org.apache.beam.runners.core.construction.graph.SplittableParDoExpander;
+import org.apache.beam.runners.core.metrics.MetricsPusher;
+import org.apache.beam.runners.fnexecution.jobsubmission.PortablePipelineJarUtils;
+import org.apache.beam.runners.fnexecution.jobsubmission.PortablePipelineResult;
 import org.apache.beam.runners.fnexecution.jobsubmission.PortablePipelineRunner;
 import org.apache.beam.runners.fnexecution.provisioning.JobInfo;
-import org.apache.beam.sdk.PipelineResult;
+import org.apache.beam.sdk.io.FileSystems;
 import org.apache.beam.sdk.metrics.MetricsEnvironment;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableSet;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Sets;
+import org.apache.beam.sdk.metrics.MetricsOptions;
+import org.apache.beam.sdk.options.PipelineOptions;
+import org.apache.beam.sdk.options.PipelineOptionsFactory;
+import org.apache.beam.sdk.options.PortablePipelineOptions;
+import org.apache.beam.sdk.options.PortablePipelineOptions.RetrievalServiceType;
+import org.apache.beam.vendor.grpc.v1p21p0.com.google.protobuf.Struct;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions;
 import org.apache.flink.api.common.JobExecutionResult;
+import org.apache.flink.client.program.DetachedEnvironment;
+import org.kohsuke.args4j.CmdLineException;
+import org.kohsuke.args4j.CmdLineParser;
+import org.kohsuke.args4j.Option;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,27 +59,19 @@ import org.slf4j.LoggerFactory;
 public class FlinkPipelineRunner implements PortablePipelineRunner {
   private static final Logger LOG = LoggerFactory.getLogger(FlinkPipelineRunner.class);
 
-  private final String id;
-  private final String retrievalToken;
   private final FlinkPipelineOptions pipelineOptions;
   private final String confDir;
   private final List<String> filesToStage;
 
   public FlinkPipelineRunner(
-      String id,
-      String retrievalToken,
-      FlinkPipelineOptions pipelineOptions,
-      @Nullable String confDir,
-      List<String> filesToStage) {
-    this.id = id;
-    this.retrievalToken = retrievalToken;
+      FlinkPipelineOptions pipelineOptions, @Nullable String confDir, List<String> filesToStage) {
     this.pipelineOptions = pipelineOptions;
     this.confDir = confDir;
     this.filesToStage = filesToStage;
   }
 
   @Override
-  public PipelineResult run(final Pipeline pipeline) throws Exception {
+  public PortablePipelineResult run(final Pipeline pipeline, JobInfo jobInfo) throws Exception {
     MetricsEnvironment.setMetricsSupported(false);
 
     FlinkPortablePipelineTranslator<?> translator;
@@ -73,22 +81,25 @@ public class FlinkPipelineRunner implements PortablePipelineRunner {
     } else {
       translator = new FlinkStreamingPortablePipelineTranslator();
     }
-    return runPipelineWithTranslator(pipeline, translator);
+    return runPipelineWithTranslator(pipeline, jobInfo, translator);
   }
 
   private <T extends FlinkPortablePipelineTranslator.TranslationContext>
-      PipelineResult runPipelineWithTranslator(
-          final Pipeline pipeline, FlinkPortablePipelineTranslator<T> translator) throws Exception {
+      PortablePipelineResult runPipelineWithTranslator(
+          final Pipeline pipeline, JobInfo jobInfo, FlinkPortablePipelineTranslator<T> translator)
+          throws Exception {
     LOG.info("Translating pipeline to Flink program.");
 
-    // Don't let the fuser fuse any subcomponents of native transforms.
-    // TODO(BEAM-6327): Remove the need for this.
-    RunnerApi.Pipeline trimmedPipeline =
-        makeKnownUrnsPrimitives(
+    // Expand any splittable ParDos within the graph to enable sizing and splitting of bundles.
+    Pipeline pipelineWithSdfExpanded =
+        ProtoOverrides.updateTransform(
+            PTransformTranslation.PAR_DO_TRANSFORM_URN,
             pipeline,
-            Sets.difference(
-                translator.knownUrns(),
-                ImmutableSet.of(PTransformTranslation.ASSIGN_WINDOWS_TRANSFORM_URN)));
+            SplittableParDoExpander.createSizedReplacement());
+
+    // Don't let the fuser fuse any subcomponents of native transforms.
+    Pipeline trimmedPipeline =
+        PipelineTrimmer.trim(pipelineWithSdfExpanded, translator.knownUrns());
 
     // Fused pipeline proto.
     // TODO: Consider supporting partially-fused graphs.
@@ -97,12 +108,6 @@ public class FlinkPipelineRunner implements PortablePipelineRunner {
                 .anyMatch(proto -> ExecutableStage.URN.equals(proto.getSpec().getUrn()))
             ? trimmedPipeline
             : GreedyPipelineFuser.fuse(trimmedPipeline).toPipeline();
-    JobInfo jobInfo =
-        JobInfo.create(
-            id,
-            pipelineOptions.getJobName(),
-            retrievalToken,
-            PipelineOptionsTranslation.toProto(pipelineOptions));
 
     FlinkPortablePipelineTranslator.Executor executor =
         translator.translate(
@@ -110,43 +115,111 @@ public class FlinkPipelineRunner implements PortablePipelineRunner {
             fusedPipeline);
     final JobExecutionResult result = executor.execute(pipelineOptions.getJobName());
 
-    return FlinkRunner.createPipelineResult(result, pipelineOptions);
+    return createPortablePipelineResult(result, pipelineOptions);
   }
 
-  private RunnerApi.Pipeline makeKnownUrnsPrimitives(
-      RunnerApi.Pipeline pipeline, Set<String> knownUrns) {
-    RunnerApi.Pipeline.Builder trimmedPipeline = pipeline.toBuilder();
-    for (String ptransformId : pipeline.getComponents().getTransformsMap().keySet()) {
-      if (knownUrns.contains(
-          pipeline.getComponents().getTransformsOrThrow(ptransformId).getSpec().getUrn())) {
-        LOG.debug("Removing descendants of known PTransform {}" + ptransformId);
-        removeDescendants(trimmedPipeline, ptransformId);
+  private PortablePipelineResult createPortablePipelineResult(
+      JobExecutionResult result, PipelineOptions options) {
+    if (result instanceof DetachedEnvironment.DetachedJobExecutionResult) {
+      LOG.info("Pipeline submitted in Detached mode");
+      // no metricsPusher because metrics are not supported in detached mode
+      return new FlinkPortableRunnerResult.Detached();
+    } else {
+      LOG.info("Execution finished in {} msecs", result.getNetRuntime());
+      Map<String, Object> accumulators = result.getAllAccumulatorResults();
+      if (accumulators != null && !accumulators.isEmpty()) {
+        LOG.info("Final accumulator values:");
+        for (Map.Entry<String, Object> entry : result.getAllAccumulatorResults().entrySet()) {
+          LOG.info("{} : {}", entry.getKey(), entry.getValue());
+        }
       }
-    }
-    return trimmedPipeline.build();
-  }
-
-  private void removeDescendants(RunnerApi.Pipeline.Builder pipeline, String parentId) {
-    RunnerApi.PTransform parentProto =
-        pipeline.getComponents().getTransformsOrDefault(parentId, null);
-    if (parentProto != null) {
-      for (String childId : parentProto.getSubtransformsList()) {
-        removeDescendants(pipeline, childId);
-        pipeline.getComponentsBuilder().removeTransforms(childId);
-      }
-      pipeline
-          .getComponentsBuilder()
-          .putTransforms(parentId, parentProto.toBuilder().clearSubtransforms().build());
+      FlinkPortableRunnerResult flinkRunnerResult =
+          new FlinkPortableRunnerResult(accumulators, result.getNetRuntime());
+      MetricsPusher metricsPusher =
+          new MetricsPusher(
+              flinkRunnerResult.getMetricsContainerStepMap(),
+              options.as(MetricsOptions.class),
+              flinkRunnerResult);
+      metricsPusher.start();
+      return flinkRunnerResult;
     }
   }
 
-  /** Indicates whether the given pipeline has any unbounded PCollections. */
-  private static boolean hasUnboundedPCollections(RunnerApi.Pipeline pipeline) {
-    checkNotNull(pipeline);
-    Collection<RunnerApi.PCollection> pCollecctions =
-        pipeline.getComponents().getPcollectionsMap().values();
-    // Assume that all PCollections are consumed at some point in the pipeline.
-    return pCollecctions.stream()
-        .anyMatch(pc -> pc.getIsBounded() == RunnerApi.IsBounded.Enum.UNBOUNDED);
+  /**
+   * Main method to be called only as the entry point to an executable jar with structure as defined
+   * in {@link PortablePipelineJarUtils}.
+   */
+  public static void main(String[] args) throws Exception {
+    // Register standard file systems.
+    FileSystems.setDefaultPipelineOptions(PipelineOptionsFactory.create());
+
+    FlinkPipelineRunnerConfiguration configuration = parseArgs(args);
+    String baseJobName =
+        configuration.baseJobName == null
+            ? PortablePipelineJarUtils.getDefaultJobName()
+            : configuration.baseJobName;
+    Preconditions.checkArgument(
+        baseJobName != null,
+        "No default job name found. Job name must be set using --base-job-name.");
+    Pipeline pipeline = PortablePipelineJarUtils.getPipelineFromClasspath(baseJobName);
+    Struct originalOptions = PortablePipelineJarUtils.getPipelineOptionsFromClasspath(baseJobName);
+
+    // Flink pipeline jars distribute and retrieve artifacts via the classpath.
+    PortablePipelineOptions portablePipelineOptions =
+        PipelineOptionsTranslation.fromProto(originalOptions).as(PortablePipelineOptions.class);
+    portablePipelineOptions.setRetrievalServiceType(RetrievalServiceType.CLASSLOADER);
+    String retrievalToken = PortablePipelineJarUtils.getArtifactManifestUri(baseJobName);
+
+    FlinkPipelineOptions flinkOptions = portablePipelineOptions.as(FlinkPipelineOptions.class);
+    String invocationId =
+        String.format("%s_%s", flinkOptions.getJobName(), UUID.randomUUID().toString());
+
+    FlinkPipelineRunner runner =
+        new FlinkPipelineRunner(
+            flinkOptions,
+            configuration.flinkConfDir,
+            detectClassPathResourcesToStage(FlinkPipelineRunner.class.getClassLoader()));
+    JobInfo jobInfo =
+        JobInfo.create(
+            invocationId,
+            flinkOptions.getJobName(),
+            retrievalToken,
+            PipelineOptionsTranslation.toProto(flinkOptions));
+    try {
+      runner.run(pipeline, jobInfo);
+    } catch (Exception e) {
+      throw new RuntimeException(String.format("Job %s failed.", invocationId), e);
+    }
+    LOG.info("Job {} finished successfully.", invocationId);
+  }
+
+  private static class FlinkPipelineRunnerConfiguration {
+    @Option(
+        name = "--flink-conf-dir",
+        usage =
+            "Directory containing Flink YAML configuration files. "
+                + "These properties will be set to all jobs submitted to Flink and take precedence "
+                + "over configurations in FLINK_CONF_DIR.")
+    private String flinkConfDir = null;
+
+    @Option(
+        name = "--base-job-name",
+        usage =
+            "The job to run. This must correspond to a subdirectory of the jar's BEAM-PIPELINE "
+                + "directory. *Only needs to be specified if the jar contains multiple pipelines.*")
+    private String baseJobName = null;
+  }
+
+  private static FlinkPipelineRunnerConfiguration parseArgs(String[] args) {
+    FlinkPipelineRunnerConfiguration configuration = new FlinkPipelineRunnerConfiguration();
+    CmdLineParser parser = new CmdLineParser(configuration);
+    try {
+      parser.parseArgument(args);
+    } catch (CmdLineException e) {
+      LOG.error("Unable to parse command line arguments.", e);
+      parser.printUsage(System.err);
+      throw new IllegalArgumentException("Unable to parse command line arguments.", e);
+    }
+    return configuration;
   }
 }

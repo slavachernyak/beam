@@ -17,15 +17,17 @@
  */
 package org.apache.beam.sdk.values;
 
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkNotNull;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkState;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkState;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -39,9 +41,9 @@ import org.apache.beam.sdk.schemas.Schema;
 import org.apache.beam.sdk.schemas.Schema.FieldType;
 import org.apache.beam.sdk.schemas.Schema.LogicalType;
 import org.apache.beam.sdk.schemas.Schema.TypeName;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterables;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Lists;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Maps;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Iterables;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Lists;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Maps;
 import org.joda.time.DateTime;
 import org.joda.time.Instant;
 import org.joda.time.ReadableDateTime;
@@ -186,8 +188,17 @@ public abstract class Row implements Serializable {
    * match.
    */
   @Nullable
-  public <T> List<T> getArray(String fieldName) {
+  public <T> Collection<T> getArray(String fieldName) {
     return getArray(getSchema().indexOf(fieldName));
+  }
+
+  /**
+   * Get an iterable value by field name, {@link IllegalStateException} is thrown if schema doesn't
+   * match.
+   */
+  @Nullable
+  public <T> Iterable<T> getIterable(String fieldName) {
+    return getIterable(getSchema().indexOf(fieldName));
   }
 
   /**
@@ -196,6 +207,16 @@ public abstract class Row implements Serializable {
   @Nullable
   public <T1, T2> Map<T1, T2> getMap(String fieldName) {
     return getMap(getSchema().indexOf(fieldName));
+  }
+
+  /**
+   * Returns the Logical Type input type for this field. {@link IllegalStateException} is thrown if
+   * schema doesn't match.
+   */
+  @Nullable
+  @SuppressWarnings("TypeParameterUnusedInFormals")
+  public <T> T getLogicalTypeValue(String fieldName) {
+    return getLogicalTypeValue(getSchema().indexOf(fieldName));
   }
 
   /**
@@ -312,7 +333,16 @@ public abstract class Row implements Serializable {
    * match.
    */
   @Nullable
-  public <T> List<T> getArray(int idx) {
+  public <T> Collection<T> getArray(int idx) {
+    return getValue(idx);
+  }
+
+  /**
+   * Get an iterable value by field index, {@link IllegalStateException} is thrown if schema doesn't
+   * match.
+   */
+  @Nullable
+  public <T> Iterable<T> getIterable(int idx) {
     return getValue(idx);
   }
 
@@ -323,6 +353,17 @@ public abstract class Row implements Serializable {
   @Nullable
   public <T1, T2> Map<T1, T2> getMap(int idx) {
     return getValue(idx);
+  }
+
+  /**
+   * Returns the Logical Type input type for this field. {@link IllegalStateException} is thrown if
+   * schema doesn't match.
+   */
+  @Nullable
+  @SuppressWarnings("TypeParameterUnusedInFormals")
+  public <T> T getLogicalTypeValue(int idx) {
+    LogicalType logicalType = checkNotNull(getSchema().getField(idx).getType().getLogicalType());
+    return (T) logicalType.toInputType(getValue(idx));
   }
 
   /**
@@ -372,15 +413,20 @@ public abstract class Row implements Serializable {
     return h;
   }
 
-  static class Equals {
-    static boolean deepEquals(Object a, Object b, Schema.FieldType fieldType) {
-      if (fieldType.getTypeName() == TypeName.LOGICAL_TYPE) {
+  public static class Equals {
+    public static boolean deepEquals(Object a, Object b, Schema.FieldType fieldType) {
+      if (a == null || b == null) {
+        return a == b;
+      } else if (fieldType.getTypeName() == TypeName.LOGICAL_TYPE) {
         return deepEquals(a, b, fieldType.getLogicalType().getBaseType());
       } else if (fieldType.getTypeName() == Schema.TypeName.BYTES) {
         return Arrays.equals((byte[]) a, (byte[]) b);
-      } else if (fieldType.getTypeName() == Schema.TypeName.ARRAY) {
-        return deepEqualsForList(
-            (List<Object>) a, (List<Object>) b, fieldType.getCollectionElementType());
+      } else if (fieldType.getTypeName() == TypeName.ARRAY) {
+        return deepEqualsForCollection(
+            (Collection<Object>) a, (Collection<Object>) b, fieldType.getCollectionElementType());
+      } else if (fieldType.getTypeName() == TypeName.ITERABLE) {
+        return deepEqualsForIterable(
+            (Iterable<Object>) a, (Iterable<Object>) b, fieldType.getCollectionElementType());
       } else if (fieldType.getTypeName() == Schema.TypeName.MAP) {
         return deepEqualsForMap(
             (Map<Object, Object>) a, (Map<Object, Object>) b, fieldType.getMapValueType());
@@ -390,12 +436,14 @@ public abstract class Row implements Serializable {
     }
 
     static int deepHashCode(Object a, Schema.FieldType fieldType) {
-      if (fieldType.getTypeName() == TypeName.LOGICAL_TYPE) {
+      if (a == null) {
+        return 0;
+      } else if (fieldType.getTypeName() == TypeName.LOGICAL_TYPE) {
         return deepHashCode(a, fieldType.getLogicalType().getBaseType());
       } else if (fieldType.getTypeName() == Schema.TypeName.BYTES) {
         return Arrays.hashCode((byte[]) a);
-      } else if (fieldType.getTypeName() == Schema.TypeName.ARRAY) {
-        return deepHashCodeForList((List<Object>) a, fieldType.getCollectionElementType());
+      } else if (fieldType.getTypeName().isCollectionType()) {
+        return deepHashCodeForIterable((Iterable<Object>) a, fieldType.getCollectionElementType());
       } else if (fieldType.getTypeName() == Schema.TypeName.MAP) {
         return deepHashCodeForMap(
             (Map<Object, Object>) a, fieldType.getMapKeyType(), fieldType.getMapValueType());
@@ -446,7 +494,8 @@ public abstract class Row implements Serializable {
       return h;
     }
 
-    static boolean deepEqualsForList(List<Object> a, List<Object> b, Schema.FieldType elementType) {
+    static boolean deepEqualsForCollection(
+        Collection<Object> a, Collection<Object> b, Schema.FieldType elementType) {
       if (a == b) {
         return true;
       }
@@ -455,19 +504,30 @@ public abstract class Row implements Serializable {
         return false;
       }
 
-      for (int i = 0; i < a.size(); i++) {
-        if (!deepEquals(a.get(i), b.get(i), elementType)) {
+      return deepEqualsForIterable(a, b, elementType);
+    }
+
+    static boolean deepEqualsForIterable(
+        Iterable<Object> a, Iterable<Object> b, Schema.FieldType elementType) {
+      if (a == b) {
+        return true;
+      }
+      Iterator<Object> bIter = b.iterator();
+      for (Object currentA : a) {
+        if (!bIter.hasNext()) {
+          return false;
+        }
+        if (!deepEquals(currentA, bIter.next(), elementType)) {
           return false;
         }
       }
-
-      return true;
+      return !bIter.hasNext();
     }
 
-    static int deepHashCodeForList(List<Object> a, Schema.FieldType elementType) {
+    static int deepHashCodeForIterable(Iterable<Object> a, Schema.FieldType elementType) {
       int h = 1;
-      for (int i = 0; i < a.size(); i++) {
-        h = 31 * h + deepHashCode(a.get(i), elementType);
+      for (Object o : a) {
+        h = 31 * h + deepHashCode(o, elementType);
       }
 
       return h;
@@ -500,6 +560,17 @@ public abstract class Row implements Serializable {
       this.schema = schema;
     }
 
+    public int nextFieldId() {
+      if (fieldValueGetterFactory != null) {
+        throw new RuntimeException("Not supported");
+      }
+      return values.size();
+    }
+
+    public Schema getSchema() {
+      return schema;
+    }
+
     public Builder addValue(@Nullable Object values) {
       this.values.add(values);
       return this;
@@ -514,13 +585,18 @@ public abstract class Row implements Serializable {
       return addValues(Arrays.asList(values));
     }
 
-    public <T> Builder addArray(List<T> values) {
+    public <T> Builder addArray(Collection<T> values) {
       this.values.add(values);
       return this;
     }
 
     public Builder addArray(Object... values) {
       addArray(Arrays.asList(values));
+      return this;
+    }
+
+    public <T> Builder addIterable(Iterable<T> values) {
+      this.values.add(values);
       return this;
     }
 
@@ -566,7 +642,10 @@ public abstract class Row implements Serializable {
     private Object verify(Object value, FieldType type, String fieldName) {
       if (TypeName.ARRAY.equals(type.getTypeName())) {
         return verifyArray(value, type.getCollectionElementType(), fieldName);
-      } else if (TypeName.MAP.equals(type.getTypeName())) {
+      } else if (TypeName.ITERABLE.equals(type.getTypeName())) {
+        return verifyIterable(value, type.getCollectionElementType(), fieldName);
+      }
+      if (TypeName.MAP.equals(type.getTypeName())) {
         return verifyMap(value, type.getMapKeyType(), type.getMapValueType(), fieldName);
       } else if (TypeName.ROW.equals(type.getTypeName())) {
         return verifyRow(value, fieldName);
@@ -584,16 +663,16 @@ public abstract class Row implements Serializable {
     private List<Object> verifyArray(
         Object value, FieldType collectionElementType, String fieldName) {
       boolean collectionElementTypeNullable = collectionElementType.getNullable();
-      if (!(value instanceof List)) {
+      if (!(value instanceof Collection)) {
         throw new IllegalArgumentException(
             String.format(
-                "For field name %s and array type expected List class. Instead "
+                "For field name %s and array type expected Collection class. Instead "
                     + "class type was %s.",
                 fieldName, value.getClass()));
       }
-      List<Object> valueList = (List<Object>) value;
-      List<Object> verifiedList = Lists.newArrayListWithCapacity(valueList.size());
-      for (Object listValue : valueList) {
+      Collection<Object> valueCollection = (Collection<Object>) value;
+      List<Object> verifiedList = Lists.newArrayListWithCapacity(valueCollection.size());
+      for (Object listValue : valueCollection) {
         if (listValue == null) {
           if (!collectionElementTypeNullable) {
             throw new IllegalArgumentException(
@@ -606,6 +685,31 @@ public abstract class Row implements Serializable {
         }
       }
       return verifiedList;
+    }
+
+    private Iterable<Object> verifyIterable(
+        Object value, FieldType collectionElementType, String fieldName) {
+      boolean collectionElementTypeNullable = collectionElementType.getNullable();
+      if (!(value instanceof Iterable)) {
+        throw new IllegalArgumentException(
+            String.format(
+                "For field name %s and iterable type expected class extending Iterable. Instead "
+                    + "class type was %s.",
+                fieldName, value.getClass()));
+      }
+      Iterable<Object> valueIterable = (Iterable<Object>) value;
+      for (Object listValue : valueIterable) {
+        if (listValue == null) {
+          if (!collectionElementTypeNullable) {
+            throw new IllegalArgumentException(
+                String.format(
+                    "%s is not nullable in Array field %s", collectionElementType, fieldName));
+          }
+        } else {
+          verify(listValue, collectionElementType, fieldName);
+        }
+      }
+      return valueIterable;
     }
 
     private Map<Object, Object> verifyMap(

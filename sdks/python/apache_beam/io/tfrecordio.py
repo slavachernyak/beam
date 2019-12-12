@@ -38,6 +38,9 @@ from apache_beam.transforms import PTransform
 __all__ = ['ReadFromTFRecord', 'WriteToTFRecord']
 
 
+_LOGGER = logging.getLogger(__name__)
+
+
 def _default_crc32c_fn(value):
   """Calculates crc32c of a bytes object using either snappy or crcmod."""
 
@@ -48,17 +51,20 @@ def _default_crc32c_fn(value):
       # https://github.com/andrix/python-snappy/pull/53
       if getattr(snappy, '_crc32c', None):
         _default_crc32c_fn.fn = snappy._crc32c  # pylint: disable=protected-access
-      else:
+      elif getattr(snappy, '_snappy', None):
         _default_crc32c_fn.fn = snappy._snappy._crc32c  # pylint: disable=protected-access
     except ImportError:
-      logging.warning('Couldn\'t find python-snappy so the implementation of '
+      pass
+
+    if not _default_crc32c_fn.fn:
+      _LOGGER.warning('Couldn\'t find python-snappy so the implementation of '
                       '_TFRecordUtil._masked_crc32c is not as fast as it could '
                       'be.')
       _default_crc32c_fn.fn = crcmod.predefined.mkPredefinedCrcFun('crc-32c')
   return _default_crc32c_fn.fn(value)
 
 
-_default_crc32c_fn.fn = None
+_default_crc32c_fn.fn = None  # type: ignore
 
 
 class _TFRecordUtil(object):
@@ -202,8 +208,7 @@ class ReadAllFromTFRecord(PTransform):
   def __init__(
       self,
       coder=coders.BytesCoder(),
-      compression_type=CompressionTypes.AUTO,
-      **kwargs):
+      compression_type=CompressionTypes.AUTO):
     """Initialize the ``ReadAllFromTFRecord`` transform.
 
     Args:
@@ -211,10 +216,8 @@ class ReadAllFromTFRecord(PTransform):
       compression_type: Used to handle compressed input files. Default value
           is CompressionTypes.AUTO, in which case the file_path's extension will
           be used to detect the compression.
-      **kwargs: optional args dictionary. These are passed through to parent
-        constructor.
     """
-    super(ReadAllFromTFRecord, self).__init__(**kwargs)
+    super(ReadAllFromTFRecord, self).__init__()
     source_from_file = partial(
         _create_tfrecordio_source, compression_type=compression_type,
         coder=coder)
@@ -236,8 +239,7 @@ class ReadFromTFRecord(PTransform):
                file_pattern,
                coder=coders.BytesCoder(),
                compression_type=CompressionTypes.AUTO,
-               validate=True,
-               **kwargs):
+               validate=True):
     """Initialize a ReadFromTFRecord transform.
 
     Args:
@@ -248,13 +250,11 @@ class ReadFromTFRecord(PTransform):
           be used to detect the compression.
       validate: Boolean flag to verify that the files exist during the pipeline
           creation time.
-      **kwargs: optional args dictionary. These are passed through to parent
-        constructor.
 
     Returns:
       A ReadFromTFRecord transform object.
     """
-    super(ReadFromTFRecord, self).__init__(**kwargs)
+    super(ReadFromTFRecord, self).__init__()
     self._source = _TFRecordSource(file_pattern, coder, compression_type,
                                    validate)
 
@@ -295,8 +295,7 @@ class WriteToTFRecord(PTransform):
                file_name_suffix='',
                num_shards=0,
                shard_name_template=None,
-               compression_type=CompressionTypes.AUTO,
-               **kwargs):
+               compression_type=CompressionTypes.AUTO):
     """Initialize WriteToTFRecord transform.
 
     Args:
@@ -317,13 +316,11 @@ class WriteToTFRecord(PTransform):
       compression_type: Used to handle compressed output files. Typical value
           is CompressionTypes.AUTO, in which case the file_path's extension will
           be used to detect the compression.
-      **kwargs: Optional args dictionary. These are passed through to parent
-        constructor.
 
     Returns:
       A WriteToTFRecord transform object.
     """
-    super(WriteToTFRecord, self).__init__(**kwargs)
+    super(WriteToTFRecord, self).__init__()
     self._sink = _TFRecordSink(file_path_prefix, coder, file_name_suffix,
                                num_shards, shard_name_template,
                                compression_type)

@@ -18,7 +18,6 @@ from __future__ import absolute_import
 from __future__ import division
 
 import logging
-import platform
 import string
 import sys
 import unittest
@@ -41,14 +40,13 @@ from apache_beam.testing.util import BeamAssertException
 from apache_beam.transforms import CombineGlobally
 from apache_beam.transforms.combiners import Count
 
-if not (platform.system() == 'Windows' and sys.version_info[0] == 2):
+try:
   import pyarrow as pa
+except ImportError:
+  pa = None
 
 
-@unittest.skipIf(
-    platform.system() == 'Windows' and sys.version_info[0] == 2,
-    "pyarrow doesn't support Windows Python 2."
-)
+@unittest.skipIf(pa is None, "PyArrow is not installed.")
 class TestParquetIT(unittest.TestCase):
 
   @classmethod
@@ -86,7 +84,7 @@ class TestParquetIT(unittest.TestCase):
 
   @staticmethod
   def _count_verifier(init_size, data_size, x):
-    name, count = x[0], x[1]
+    name, count = x[0].decode('utf-8'), x[1]
     counter = Counter(
         [string.ascii_uppercase[x%26] for x in range(0, data_size*4, 4)]
     )

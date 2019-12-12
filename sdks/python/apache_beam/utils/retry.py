@@ -27,6 +27,7 @@ needed right now use a @retry.no_retries decorator.
 
 from __future__ import absolute_import
 
+import functools
 import logging
 import random
 import sys
@@ -48,6 +49,9 @@ try:
 except ImportError:
   HttpError = None
 # pylint: enable=wrong-import-order, wrong-import-position
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class PermanentException(Exception):
@@ -103,6 +107,15 @@ def retry_on_server_errors_filter(exception):
   return not isinstance(exception, PermanentException)
 
 
+# TODO(BEAM-6202): Dataflow returns 404 for job ids that actually exist.
+# Retry on those errors.
+def retry_on_server_errors_and_notfound_filter(exception):
+  if HttpError is not None and isinstance(exception, HttpError):
+    if exception.status_code == 404:  # 404 Not Found
+      return True
+  return retry_on_server_errors_filter(exception)
+
+
 def retry_on_server_errors_and_timeout_filter(exception):
   if HttpError is not None and isinstance(exception, HttpError):
     if exception.status_code == 408:  # 408 Request Timeout
@@ -143,7 +156,7 @@ def no_retries(fun):
 
 
 def with_exponential_backoff(
-    num_retries=7, initial_delay_secs=5.0, logger=logging.warning,
+    num_retries=7, initial_delay_secs=5.0, logger=_LOGGER.warning,
     retry_filter=retry_on_server_errors_filter,
     clock=Clock(), fuzz=True, factor=2, max_delay_secs=60 * 60):
   """Decorator with arguments that control the retry logic.
@@ -153,7 +166,7 @@ def with_exponential_backoff(
     initial_delay_secs: The delay before the first retry, in seconds.
     logger: A callable used to report an exception. Must have the same signature
       as functions in the standard logging module. The default is
-      logging.warning.
+      _LOGGER.warning.
     retry_filter: A callable getting the exception raised and returning True
       if the retry should happen. For instance we do not want to retry on
       404 Http errors most of the time. The default value will return true
@@ -185,6 +198,7 @@ def with_exponential_backoff(
 
   def real_decorator(fun):
     """The real decorator whose purpose is to return the wrapped function."""
+    @functools.wraps(fun)
     def wrapper(*args, **kwargs):
       retry_intervals = iter(
           FuzzedExponentialIntervals(

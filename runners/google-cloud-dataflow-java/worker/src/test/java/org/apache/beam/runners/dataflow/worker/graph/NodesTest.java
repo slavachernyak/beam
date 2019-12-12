@@ -48,8 +48,8 @@ import org.apache.beam.sdk.util.WindowedValue.FullWindowedValueCoder;
 import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.sdk.values.TupleTag;
 import org.apache.beam.sdk.values.WindowingStrategy;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableList;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableMap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableList;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -118,23 +118,29 @@ public class NodesTest {
                         GlobalWindow.Coder.INSTANCE))));
     assertSame(
         param,
-        RegisterRequestNode.create(param, nameContexts, sideInputInfos, pcollectionViews)
+        RegisterRequestNode.create(
+                param, nameContexts, sideInputInfos, pcollectionViews, ImmutableMap.of())
             .getRegisterRequest());
     assertSame(
         nameContexts,
-        RegisterRequestNode.create(param, nameContexts, sideInputInfos, pcollectionViews)
+        RegisterRequestNode.create(
+                param, nameContexts, sideInputInfos, pcollectionViews, ImmutableMap.of())
             .getPTransformIdToPartialNameContextMap());
     assertSame(
         sideInputInfos,
-        RegisterRequestNode.create(param, nameContexts, sideInputInfos, pcollectionViews)
+        RegisterRequestNode.create(
+                param, nameContexts, sideInputInfos, pcollectionViews, ImmutableMap.of())
             .getPTransformIdToSideInputInfoMap());
     assertSame(
         pcollectionViews,
-        RegisterRequestNode.create(param, nameContexts, sideInputInfos, pcollectionViews)
+        RegisterRequestNode.create(
+                param, nameContexts, sideInputInfos, pcollectionViews, ImmutableMap.of())
             .getPTransformIdToPCollectionViewMap());
     assertNotEquals(
-        RegisterRequestNode.create(param, nameContexts, sideInputInfos, pcollectionViews),
-        RegisterRequestNode.create(param, nameContexts, sideInputInfos, pcollectionViews));
+        RegisterRequestNode.create(
+            param, nameContexts, sideInputInfos, pcollectionViews, ImmutableMap.of()),
+        RegisterRequestNode.create(
+            param, nameContexts, sideInputInfos, pcollectionViews, ImmutableMap.of()));
   }
 
   @Test

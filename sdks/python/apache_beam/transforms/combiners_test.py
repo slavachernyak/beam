@@ -26,18 +26,26 @@ import unittest
 
 import hamcrest as hc
 from future.builtins import range
+from nose.plugins.attrib import attr
 
 import apache_beam as beam
 import apache_beam.transforms.combiners as combine
+from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.testing.test_pipeline import TestPipeline
+from apache_beam.testing.test_stream import TestStream
 from apache_beam.testing.util import assert_that
 from apache_beam.testing.util import equal_to
+from apache_beam.testing.util import equal_to_per_window
+from apache_beam.transforms import window
 from apache_beam.transforms.core import CombineGlobally
 from apache_beam.transforms.core import Create
 from apache_beam.transforms.core import Map
 from apache_beam.transforms.display import DisplayData
 from apache_beam.transforms.display_test import DisplayDataItemMatcher
 from apache_beam.transforms.ptransform import PTransform
+from apache_beam.transforms.window import TimestampCombiner
+from apache_beam.typehints import TypeCheckError
+from apache_beam.utils.timestamp import Timestamp
 
 
 class CombineTest(unittest.TestCase):
@@ -75,7 +83,7 @@ class CombineTest(unittest.TestCase):
     assert_that(result_bot, equal_to([[0, 1, 1, 1]]), label='assert:bot')
 
     # Again for per-key combines.
-    pcoll = pipeline | 'start-perkye' >> Create(
+    pcoll = pipeline | 'start-perkey' >> Create(
         [('a', x) for x in [6, 3, 1, 1, 9, 1, 5, 2, 0, 6]])
     result_key_top = pcoll | 'top-perkey' >> combine.Top.LargestPerKey(5)
     result_key_bot = pcoll | 'bot-perkey' >> combine.Top.SmallestPerKey(4)
@@ -391,6 +399,160 @@ class CombineTest(unittest.TestCase):
           | beam.CombineGlobally(combine.MeanCombineFn()).with_fanout(11))
       assert_that(result, equal_to([49.5]))
 
+
+class LatestTest(unittest.TestCase):
+
+  def test_globally(self):
+    l = [window.TimestampedValue(3, 100),
+         window.TimestampedValue(1, 200),
+         window.TimestampedValue(2, 300)]
+    with TestPipeline() as p:
+      # Map(lambda x: x) PTransform is added after Create here, because when
+      # a PCollection of TimestampedValues is created with Create PTransform,
+      # the timestamps are not assigned to it. Adding a Map forces the
+      # PCollection to go through a DoFn so that the PCollection consists of
+      # the elements with timestamps assigned to them instead of a PCollection
+      # of TimestampedValue(element, timestamp).
+      pc = p | Create(l) | Map(lambda x: x)
+      latest = pc | combine.Latest.Globally()
+      assert_that(latest, equal_to([2]))
+
+  def test_globally_empty(self):
+    l = []
+    with TestPipeline() as p:
+      pc = p | Create(l) | Map(lambda x: x)
+      latest = pc | combine.Latest.Globally()
+      assert_that(latest, equal_to([None]))
+
+  def test_per_key(self):
+    l = [window.TimestampedValue(('a', 1), 300),
+         window.TimestampedValue(('b', 3), 100),
+         window.TimestampedValue(('a', 2), 200)]
+    with TestPipeline() as p:
+      pc = p | Create(l) | Map(lambda x: x)
+      latest = pc | combine.Latest.PerKey()
+      assert_that(latest, equal_to([('a', 1), ('b', 3)]))
+
+  def test_per_key_empty(self):
+    l = []
+    with TestPipeline() as p:
+      pc = p | Create(l) | Map(lambda x: x)
+      latest = pc | combine.Latest.PerKey()
+      assert_that(latest, equal_to([]))
+
+
+class LatestCombineFnTest(unittest.TestCase):
+
+  def setUp(self):
+    self.fn = combine.LatestCombineFn()
+
+  def test_create_accumulator(self):
+    accumulator = self.fn.create_accumulator()
+    self.assertEqual(accumulator, (None, window.MIN_TIMESTAMP))
+
+  def test_add_input(self):
+    accumulator = self.fn.create_accumulator()
+    element = (1, 100)
+    new_accumulator = self.fn.add_input(accumulator, element)
+    self.assertEqual(new_accumulator, (1, 100))
+
+  def test_merge_accumulators(self):
+    accumulators = [(2, 400), (5, 100), (9, 200)]
+    merged_accumulator = self.fn.merge_accumulators(accumulators)
+    self.assertEqual(merged_accumulator, (2, 400))
+
+  def test_extract_output(self):
+    accumulator = (1, 100)
+    output = self.fn.extract_output(accumulator)
+    self.assertEqual(output, 1)
+
+  def test_with_input_types_decorator_violation(self):
+    l_int = [1, 2, 3]
+    l_dict = [{'a': 3}, {'g': 5}, {'r': 8}]
+    l_3_tuple = [(12, 31, 41), (12, 34, 34), (84, 92, 74)]
+
+    with self.assertRaises(TypeCheckError):
+      with TestPipeline() as p:
+        pc = p | Create(l_int)
+        _ = pc | beam.CombineGlobally(self.fn)
+
+    with self.assertRaises(TypeCheckError):
+      with TestPipeline() as p:
+        pc = p | Create(l_dict)
+        _ = pc | beam.CombineGlobally(self.fn)
+
+    with self.assertRaises(TypeCheckError):
+      with TestPipeline() as p:
+        pc = p | Create(l_3_tuple)
+        _ = pc | beam.CombineGlobally(self.fn)
+
+#
+# Test cases for streaming.
+#
+@attr('ValidatesRunner')
+class TimestampCombinerTest(unittest.TestCase):
+
+  def test_combiner_earliest(self):
+    """Test TimestampCombiner with EARLIEST."""
+    options = PipelineOptions(streaming=True)
+    with TestPipeline(options=options) as p:
+      result = (p
+                | TestStream()
+                .add_elements([window.TimestampedValue(('k', 100), 2)])
+                .add_elements([window.TimestampedValue(('k', 400), 7)])
+                .advance_watermark_to_infinity()
+                | beam.WindowInto(
+                    window.FixedWindows(10),
+                    timestamp_combiner=TimestampCombiner.OUTPUT_AT_EARLIEST)
+                | beam.CombinePerKey(sum))
+
+      records = (result
+                 | beam.Map(lambda e, ts=beam.DoFn.TimestampParam: (e, ts)))
+
+      # All the KV pairs are applied GBK using EARLIEST timestamp for the same
+      # key.
+      expected_window_to_elements = {
+          window.IntervalWindow(0, 10): [
+              (('k', 500), Timestamp(2)),
+          ],
+      }
+
+      assert_that(
+          records,
+          equal_to_per_window(expected_window_to_elements),
+          use_global_window=False,
+          label='assert per window')
+
+  def test_combiner_latest(self):
+    """Test TimestampCombiner with LATEST."""
+    options = PipelineOptions(streaming=True)
+    with TestPipeline(options=options) as p:
+      result = (p
+                | TestStream()
+                .add_elements([window.TimestampedValue(('k', 100), 2)])
+                .add_elements([window.TimestampedValue(('k', 400), 7)])
+                .advance_watermark_to_infinity()
+                | beam.WindowInto(
+                    window.FixedWindows(10),
+                    timestamp_combiner=TimestampCombiner.OUTPUT_AT_LATEST)
+                | beam.CombinePerKey(sum))
+
+      records = (result
+                 | beam.Map(lambda e, ts=beam.DoFn.TimestampParam: (e, ts)))
+
+      # All the KV pairs are applied GBK using LATEST timestamp for
+      # the same key.
+      expected_window_to_elements = {
+          window.IntervalWindow(0, 10): [
+              (('k', 500), Timestamp(7)),
+          ],
+      }
+
+      assert_that(
+          records,
+          equal_to_per_window(expected_window_to_elements),
+          use_global_window=False,
+          label='assert per window')
 
 if __name__ == '__main__':
   unittest.main()

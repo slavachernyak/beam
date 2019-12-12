@@ -63,7 +63,6 @@ public class EnvironmentsTest implements Serializable {
         Environments.createOrGetDefaultEnvironment(Environments.ENVIRONMENT_DOCKER, "java"),
         is(
             Environment.newBuilder()
-                .setUrl("java")
                 .setUrn(BeamUrns.getUrn(StandardEnvironments.Environments.DOCKER))
                 .setPayload(
                     DockerPayload.newBuilder().setContainerImage("java").build().toByteString())
@@ -224,8 +223,7 @@ public class EnvironmentsTest implements Serializable {
   public void getEnvironmentRead() throws IOException {
     SdkComponents components = SdkComponents.create();
     components.registerEnvironment(Environments.createDockerEnvironment("java"));
-    ReadPayload payload =
-        ReadTranslation.toProto(Read.from(CountingSource.unbounded()), components);
+    ReadPayload payload = ReadTranslation.toProto(Read.from(CountingSource.upTo(10)), components);
     RehydratedComponents rehydratedComponents =
         RehydratedComponents.forComponents(components.toComponents());
     PTransform builder =

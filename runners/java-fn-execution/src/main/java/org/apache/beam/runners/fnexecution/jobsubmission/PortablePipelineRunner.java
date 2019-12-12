@@ -18,9 +18,9 @@
 package org.apache.beam.runners.fnexecution.jobsubmission;
 
 import org.apache.beam.model.pipeline.v1.RunnerApi;
-import org.apache.beam.sdk.PipelineResult;
+import org.apache.beam.runners.fnexecution.provisioning.JobInfo;
 
 /** Runs a portable Beam pipeline on some execution engine. */
 public interface PortablePipelineRunner {
-  PipelineResult run(RunnerApi.Pipeline pipeline) throws Exception;
+  PortablePipelineResult run(RunnerApi.Pipeline pipeline, JobInfo jobInfo) throws Exception;
 }

@@ -96,7 +96,8 @@ class GameStatsIT(unittest.TestCase):
 
     for _ in range(message_count):
       self.pub_client.publish(topic.name,
-                              self.INPUT_EVENT % self._test_timestamp)
+                              (self.INPUT_EVENT % self._test_timestamp
+                              ).encode('utf-8'))
 
   def _cleanup_pubsub(self):
     test_utils.cleanup_subscriptions(self.sub_client, [self.input_sub])
@@ -139,7 +140,8 @@ class GameStatsIT(unittest.TestCase):
     # Get pipeline options from command argument: --test-pipeline-options,
     # and start pipeline job by calling pipeline main function.
     game_stats.run(
-        self.test_pipeline.get_full_options_as_args(**extra_opts))
+        self.test_pipeline.get_full_options_as_args(**extra_opts),
+        save_main_session=False)
 
 
 if __name__ == '__main__':

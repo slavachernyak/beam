@@ -27,24 +27,26 @@ import sys
 import warnings
 from builtins import object
 from builtins import zip
+from typing import Any
+from typing import Dict
+from typing import Iterable
+from typing import List
+from typing import Tuple
+from typing import TypeVar
+from typing import Union
 
 from past.builtins import long
 
+from apache_beam import typehints
 from apache_beam.transforms import core
 from apache_beam.transforms import cy_combiners
 from apache_beam.transforms import ptransform
 from apache_beam.transforms import window
 from apache_beam.transforms.display import DisplayDataItem
-from apache_beam.typehints import KV
-from apache_beam.typehints import Any
-from apache_beam.typehints import Dict
-from apache_beam.typehints import Iterable
-from apache_beam.typehints import List
-from apache_beam.typehints import Tuple
-from apache_beam.typehints import TypeVariable
-from apache_beam.typehints import Union
 from apache_beam.typehints import with_input_types
 from apache_beam.typehints import with_output_types
+from apache_beam.utils.timestamp import Duration
+from apache_beam.utils.timestamp import Timestamp
 
 __all__ = [
     'Count',
@@ -53,12 +55,14 @@ __all__ = [
     'Top',
     'ToDict',
     'ToList',
+    'Latest'
     ]
 
 # Type variables
-T = TypeVariable('T')
-K = TypeVariable('K')
-V = TypeVariable('V')
+T = TypeVar('T')
+K = TypeVar('K')
+V = TypeVar('V')
+TimestampType = Union[int, float, Timestamp, Duration]
 
 
 class Mean(object):
@@ -128,11 +132,13 @@ class Count(object):
     """combiners.Count.PerElement counts how many times each element occurs."""
 
     def expand(self, pcoll):
-      paired_with_void_type = KV[pcoll.element_type, Any]
+      paired_with_void_type = typehints.Tuple[pcoll.element_type, Any]
+      output_type = typehints.KV[pcoll.element_type, int]
       return (pcoll
               | ('%s:PairWithVoid' % self.label >> core.Map(lambda x: (x, None))
                  .with_output_types(paired_with_void_type))
-              | core.CombinePerKey(CountCombineFn()))
+              | core.CombinePerKey(CountCombineFn())
+              .with_output_types(output_type))
 
 
 @with_input_types(Any)
@@ -213,10 +219,12 @@ class Top(object):
       self._py2__init__(n, None, **kwargs)
 
     # Python 3 sort does not accept a comparison operator, and nor do we.
+    # FIXME: mypy would handle this better if we placed the _py*__init__ funcs
+    #  inside the if/else block below:
     if sys.version_info[0] < 3:
       __init__ = _py2__init__
     else:
-      __init__ = _py3__init__
+      __init__ = _py3__init__  # type: ignore
 
     def default_label(self):
       return 'Top(%d)' % self._n
@@ -303,7 +311,7 @@ class Top(object):
     if sys.version_info[0] < 3:
       __init__ = _py2__init__
     else:
-      __init__ = _py3__init__
+      __init__ = _py3__init__  # type: ignore
 
     def default_label(self):
       return 'TopPerKey(%d)' % self._n
@@ -312,7 +320,7 @@ class Top(object):
       """Expands the transform.
 
       Raises TypeCheckError: If the output type of the input PCollection is not
-      compatible with KV[A, B].
+      compatible with Tuple[A, B].
 
       Args:
         pcoll: PCollection to process
@@ -350,7 +358,7 @@ class Top(object):
 
 
 @with_input_types(T)
-@with_output_types(KV[None, List[T]])
+@with_output_types(Tuple[None, List[T]])
 class _TopPerBundle(core.DoFn):
   def __init__(self, n, less_than, key):
     self._n = n
@@ -385,7 +393,7 @@ class _TopPerBundle(core.DoFn):
           (None, self._heap))
 
 
-@with_input_types(KV[None, Iterable[List[T]]])
+@with_input_types(Tuple[None, Iterable[List[T]]])
 @with_output_types(List[T])
 class _MergeTopPerBundle(core.DoFn):
   def __init__(self, n, less_than, key):
@@ -858,3 +866,65 @@ class PhasedCombineFnExecutor(object):
 
   def extract_only(self, accumulator):
     return self.combine_fn.extract_output(accumulator)
+
+
+class Latest(object):
+  """Combiners for computing the latest element"""
+
+  @with_input_types(T)
+  @with_output_types(T)
+  class Globally(ptransform.PTransform):
+    """Compute the element with the latest timestamp from a
+    PCollection."""
+
+    @staticmethod
+    def add_timestamp(element, timestamp=core.DoFn.TimestampParam):
+      return [(element, timestamp)]
+
+    def expand(self, pcoll):
+      return (pcoll
+              | core.ParDo(self.add_timestamp)
+              .with_output_types(Tuple[T, TimestampType])  # type: ignore[misc]
+              | core.CombineGlobally(LatestCombineFn()))
+
+  @with_input_types(Tuple[K, V])
+  @with_output_types(Tuple[K, V])
+  class PerKey(ptransform.PTransform):
+    """Compute elements with the latest timestamp for each key
+    from a keyed PCollection"""
+
+    @staticmethod
+    def add_timestamp(element, timestamp=core.DoFn.TimestampParam):
+      key, value = element
+      return [(key, (value, timestamp))]
+
+    def expand(self, pcoll):
+      return (pcoll
+              | core.ParDo(self.add_timestamp)
+              .with_output_types(Tuple[K, Tuple[T, TimestampType]])  # type: ignore[misc]
+              | core.CombinePerKey(LatestCombineFn()))
+
+
+@with_input_types(Tuple[T, TimestampType])  # type: ignore[misc]
+@with_output_types(T)
+class LatestCombineFn(core.CombineFn):
+  """CombineFn to get the element with the latest timestamp
+  from a PCollection."""
+
+  def create_accumulator(self):
+    return (None, window.MIN_TIMESTAMP)
+
+  def add_input(self, accumulator, element):
+    if accumulator[1] > element[1]:
+      return accumulator
+    else:
+      return element
+
+  def merge_accumulators(self, accumulators):
+    result = self.create_accumulator()
+    for accumulator in accumulators:
+      result = self.add_input(result, accumulator)
+    return result
+
+  def extract_output(self, accumulator):
+    return accumulator[0]

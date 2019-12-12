@@ -53,11 +53,13 @@ import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.Sum;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableList;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterators;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Sets;
-import org.apache.samza.container.SamzaContainerContext;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableList;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Iterators;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Sets;
+import org.apache.samza.context.ContainerContext;
+import org.apache.samza.context.JobContext;
 import org.apache.samza.metrics.MetricsRegistry;
+import org.apache.samza.storage.StorageEngineFactory;
 import org.apache.samza.storage.kv.Entry;
 import org.apache.samza.storage.kv.KeyValueIterator;
 import org.apache.samza.storage.kv.KeyValueStore;
@@ -194,7 +196,9 @@ public class SamzaStoreStateInternalsTest implements Serializable {
         File storeDir,
         MetricsRegistry registry,
         SystemStreamPartition changeLogSystemStreamPartition,
-        SamzaContainerContext containerContext) {
+        JobContext jobContext,
+        ContainerContext containerContext,
+        StorageEngineFactory.StoreMode readWrite) {
       KeyValueStoreMetrics metrics = new KeyValueStoreMetrics(storeName, registry);
       return new TestStore(metrics);
     }

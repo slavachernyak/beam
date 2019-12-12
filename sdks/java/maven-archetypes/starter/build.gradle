@@ -17,7 +17,7 @@
  */
 
 plugins { id 'org.apache.beam.module' }
-applyJavaNature(exportJavadoc: false)
+applyJavaNature(exportJavadoc: false, automaticModuleName: 'org.apache.beam.maven.archetypes.starter')
 
 description = "Apache Beam :: SDKs :: Java :: Maven Archetypes :: Starter"
 ext.summary = """A Maven archetype to create a simple starter pipeline to
@@ -33,6 +33,6 @@ processResources {
 }
 
 dependencies {
-  shadow project(path: ":beam-runners-direct-java", configuration: "shadow")
-  shadow project(path: ":beam-sdks-java-core", configuration: "shadow")
+  compile project(path: ":runners:direct-java", configuration: "shadow")
+  compile project(path: ":sdks:java:core", configuration: "shadow")
 }

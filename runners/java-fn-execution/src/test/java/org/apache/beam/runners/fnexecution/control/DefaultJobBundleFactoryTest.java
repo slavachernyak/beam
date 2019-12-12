@@ -23,6 +23,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import org.apache.beam.model.fnexecution.v1.BeamFnApi.InstructionResponse;
@@ -33,9 +35,9 @@ import org.apache.beam.model.pipeline.v1.RunnerApi.Environment;
 import org.apache.beam.model.pipeline.v1.RunnerApi.ExecutableStagePayload;
 import org.apache.beam.model.pipeline.v1.RunnerApi.FunctionSpec;
 import org.apache.beam.model.pipeline.v1.RunnerApi.PCollection;
-import org.apache.beam.model.pipeline.v1.RunnerApi.SdkFunctionSpec;
 import org.apache.beam.model.pipeline.v1.RunnerApi.WindowingStrategy;
 import org.apache.beam.runners.core.construction.ModelCoders;
+import org.apache.beam.runners.core.construction.PipelineOptionsTranslation;
 import org.apache.beam.runners.core.construction.graph.ExecutableStage;
 import org.apache.beam.runners.fnexecution.GrpcFnServer;
 import org.apache.beam.runners.fnexecution.ServerFactory;
@@ -48,11 +50,17 @@ import org.apache.beam.runners.fnexecution.logging.GrpcLoggingService;
 import org.apache.beam.runners.fnexecution.provisioning.JobInfo;
 import org.apache.beam.runners.fnexecution.provisioning.StaticGrpcProvisionService;
 import org.apache.beam.runners.fnexecution.state.GrpcStateService;
+import org.apache.beam.runners.fnexecution.state.StateDelegator;
+import org.apache.beam.runners.fnexecution.state.StateRequestHandler;
 import org.apache.beam.sdk.fn.IdGenerator;
 import org.apache.beam.sdk.fn.IdGenerators;
-import org.apache.beam.vendor.grpc.v1p13p1.com.google.protobuf.ByteString;
-import org.apache.beam.vendor.grpc.v1p13p1.com.google.protobuf.Struct;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableMap;
+import org.apache.beam.sdk.fn.data.CloseableFnDataReceiver;
+import org.apache.beam.sdk.options.PipelineOptionsFactory;
+import org.apache.beam.sdk.options.PortablePipelineOptions;
+import org.apache.beam.vendor.grpc.v1p21p0.com.google.protobuf.ByteString;
+import org.apache.beam.vendor.grpc.v1p21p0.com.google.protobuf.Struct;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -90,6 +98,7 @@ public class DefaultJobBundleFactoryTest {
           IdGenerator idGenerator) -> envFactory;
   private final Map<String, EnvironmentFactory.Provider> envFactoryProviderMap =
       ImmutableMap.of(environment.getUrn(), envFactoryProvider);
+  private DefaultJobBundleFactory.ServerInfo serverInfo;
 
   @Before
   public void setUpMocks() throws Exception {
@@ -100,22 +109,30 @@ public class DefaultJobBundleFactoryTest {
         .thenReturn(CompletableFuture.completedFuture(instructionResponse));
     when(dataServer.getApiServiceDescriptor())
         .thenReturn(ApiServiceDescriptor.getDefaultInstance());
+    GrpcDataService dataService = mock(GrpcDataService.class);
+    when(dataService.send(any(), any())).thenReturn(mock(CloseableFnDataReceiver.class));
+    when(dataServer.getService()).thenReturn(dataService);
     when(stateServer.getApiServiceDescriptor())
         .thenReturn(ApiServiceDescriptor.getDefaultInstance());
+    GrpcStateService stateService = mock(GrpcStateService.class);
+    when(stateService.registerForProcessBundleInstructionId(any(), any()))
+        .thenReturn(mock(StateDelegator.Registration.class));
+    when(stateServer.getService()).thenReturn(stateService);
+    serverInfo =
+        new AutoValue_DefaultJobBundleFactory_ServerInfo.Builder()
+            .setControlServer(controlServer)
+            .setLoggingServer(loggingServer)
+            .setRetrievalServer(retrievalServer)
+            .setProvisioningServer(provisioningServer)
+            .setDataServer(dataServer)
+            .setStateServer(stateServer)
+            .build();
   }
 
   @Test
   public void createsCorrectEnvironment() throws Exception {
     try (DefaultJobBundleFactory bundleFactory =
-        new DefaultJobBundleFactory(
-            envFactoryProviderMap,
-            stageIdGenerator,
-            controlServer,
-            loggingServer,
-            retrievalServer,
-            provisioningServer,
-            dataServer,
-            stateServer)) {
+        createDefaultJobBundleFactory(envFactoryProviderMap)) {
       bundleFactory.forStage(getExecutableStage(environment));
       verify(envFactory).createEnvironment(environment);
     }
@@ -160,9 +177,7 @@ public class DefaultJobBundleFactoryTest {
             environmentA.getUrn(), environmentProviderFactoryA,
             environmentB.getUrn(), environmentProviderFactoryB);
     try (DefaultJobBundleFactory bundleFactory =
-        DefaultJobBundleFactory.create(
-            JobInfo.create("testJob", "testJob", "token", Struct.getDefaultInstance()),
-            environmentFactoryProviderMap)) {
+        createDefaultJobBundleFactory(environmentFactoryProviderMap)) {
       bundleFactory.forStage(getExecutableStage(environmentA));
       verify(environmentProviderFactoryA, Mockito.times(1))
           .createEnvironmentFactory(any(), any(), any(), any(), any(), any());
@@ -178,6 +193,76 @@ public class DefaultJobBundleFactoryTest {
           .createEnvironmentFactory(any(), any(), any(), any(), any(), any());
       verify(envFactoryA, Mockito.times(1)).createEnvironment(environmentA);
       verify(envFactoryA, Mockito.times(1)).createEnvironment(environmentAA);
+    }
+  }
+
+  @Test
+  public void createsMultipleEnvironmentsWithSdkWorkerParallelism() throws Exception {
+    ServerFactory serverFactory = ServerFactory.createDefault();
+    Environment environmentA =
+        Environment.newBuilder()
+            .setUrn("env:urn:a")
+            .setPayload(ByteString.copyFrom(new byte[1]))
+            .build();
+    EnvironmentFactory envFactoryA = mock(EnvironmentFactory.class);
+    when(envFactoryA.createEnvironment(environmentA)).thenReturn(remoteEnvironment);
+    EnvironmentFactory.Provider environmentProviderFactoryA =
+        mock(EnvironmentFactory.Provider.class);
+    when(environmentProviderFactoryA.createEnvironmentFactory(
+            any(), any(), any(), any(), any(), any()))
+        .thenReturn(envFactoryA);
+    when(environmentProviderFactoryA.getServerFactory()).thenReturn(serverFactory);
+
+    Map<String, Provider> environmentFactoryProviderMap =
+        ImmutableMap.of(environmentA.getUrn(), environmentProviderFactoryA);
+
+    PortablePipelineOptions portableOptions =
+        PipelineOptionsFactory.as(PortablePipelineOptions.class);
+    portableOptions.setSdkWorkerParallelism(2);
+    Struct pipelineOptions = PipelineOptionsTranslation.toProto(portableOptions);
+
+    try (DefaultJobBundleFactory bundleFactory =
+        new DefaultJobBundleFactory(
+            JobInfo.create("testJob", "testJob", "token", pipelineOptions),
+            environmentFactoryProviderMap,
+            stageIdGenerator,
+            serverInfo)) {
+      bundleFactory.forStage(getExecutableStage(environmentA));
+      verify(environmentProviderFactoryA, Mockito.times(1))
+          .createEnvironmentFactory(any(), any(), any(), any(), any(), any());
+      verify(envFactoryA, Mockito.times(1)).createEnvironment(environmentA);
+
+      bundleFactory.forStage(getExecutableStage(environmentA));
+      verify(environmentProviderFactoryA, Mockito.times(2))
+          .createEnvironmentFactory(any(), any(), any(), any(), any(), any());
+      verify(envFactoryA, Mockito.times(2)).createEnvironment(environmentA);
+
+      // round robin, no new environment created
+      bundleFactory.forStage(getExecutableStage(environmentA));
+      verify(environmentProviderFactoryA, Mockito.times(2))
+          .createEnvironmentFactory(any(), any(), any(), any(), any(), any());
+      verify(envFactoryA, Mockito.times(2)).createEnvironment(environmentA);
+    }
+
+    portableOptions.setSdkWorkerParallelism(0);
+    pipelineOptions = PipelineOptionsTranslation.toProto(portableOptions);
+    Mockito.reset(envFactoryA);
+    when(envFactoryA.createEnvironment(environmentA)).thenReturn(remoteEnvironment);
+    int expectedParallelism = Math.max(1, Runtime.getRuntime().availableProcessors() - 1);
+    try (DefaultJobBundleFactory bundleFactory =
+        new DefaultJobBundleFactory(
+            JobInfo.create("testJob", "testJob", "token", pipelineOptions),
+            environmentFactoryProviderMap,
+            stageIdGenerator,
+            serverInfo)) {
+      HashSet<StageBundleFactory> stageBundleFactorySet = new HashSet<>();
+      // more factories than parallelism for round-robin
+      int numStageBundleFactories = expectedParallelism + 5;
+      for (int i = 0; i < numStageBundleFactories; i++) {
+        stageBundleFactorySet.add(bundleFactory.forStage(getExecutableStage(environmentA)));
+      }
+      verify(envFactoryA, Mockito.times(expectedParallelism)).createEnvironment(environmentA);
+      Assert.assertEquals(numStageBundleFactories, stageBundleFactorySet.size());
     }
   }
 
@@ -221,18 +306,50 @@ public class DefaultJobBundleFactoryTest {
   }
 
   @Test
-  public void closesEnvironmentOnCleanup() throws Exception {
-    DefaultJobBundleFactory bundleFactory =
+  public void expiresEnvironment() throws Exception {
+    ServerFactory serverFactory = ServerFactory.createDefault();
+
+    Environment environmentA = Environment.newBuilder().setUrn("env:urn:a").build();
+    EnvironmentFactory envFactoryA = mock(EnvironmentFactory.class);
+    when(envFactoryA.createEnvironment(environmentA)).thenReturn(remoteEnvironment);
+    EnvironmentFactory.Provider environmentProviderFactoryA =
+        mock(EnvironmentFactory.Provider.class);
+    when(environmentProviderFactoryA.createEnvironmentFactory(
+            any(), any(), any(), any(), any(), any()))
+        .thenReturn(envFactoryA);
+    when(environmentProviderFactoryA.getServerFactory()).thenReturn(serverFactory);
+
+    Map<String, Provider> environmentFactoryProviderMap =
+        ImmutableMap.of(environmentA.getUrn(), environmentProviderFactoryA);
+
+    PortablePipelineOptions portableOptions =
+        PipelineOptionsFactory.as(PortablePipelineOptions.class);
+    portableOptions.setEnvironmentExpirationMillis(1);
+    Struct pipelineOptions = PipelineOptionsTranslation.toProto(portableOptions);
+
+    try (DefaultJobBundleFactory bundleFactory =
         new DefaultJobBundleFactory(
-            envFactoryProviderMap,
+            JobInfo.create("testJob", "testJob", "token", pipelineOptions),
+            environmentFactoryProviderMap,
             stageIdGenerator,
-            controlServer,
-            loggingServer,
-            retrievalServer,
-            provisioningServer,
-            dataServer,
-            stateServer);
-    try (AutoCloseable unused = bundleFactory) {
+            serverInfo)) {
+      OutputReceiverFactory orf = mock(OutputReceiverFactory.class);
+      StateRequestHandler srh = mock(StateRequestHandler.class);
+      when(srh.getCacheTokens()).thenReturn(Collections.emptyList());
+      StageBundleFactory sbf = bundleFactory.forStage(getExecutableStage(environmentA));
+      Thread.sleep(10); // allow environment to expire
+      sbf.getBundle(orf, srh, BundleProgressHandler.ignored()).close();
+      Thread.sleep(10); // allow environment to expire
+      sbf.getBundle(orf, srh, BundleProgressHandler.ignored()).close();
+    }
+    verify(envFactoryA, Mockito.times(3)).createEnvironment(environmentA);
+    verify(remoteEnvironment, Mockito.times(3)).close();
+  }
+
+  @Test
+  public void closesEnvironmentOnCleanup() throws Exception {
+    try (DefaultJobBundleFactory bundleFactory =
+        createDefaultJobBundleFactory(envFactoryProviderMap)) {
       bundleFactory.forStage(getExecutableStage(environment));
     }
     verify(remoteEnvironment).close();
@@ -241,15 +358,7 @@ public class DefaultJobBundleFactoryTest {
   @Test
   public void cachesEnvironment() throws Exception {
     try (DefaultJobBundleFactory bundleFactory =
-        new DefaultJobBundleFactory(
-            envFactoryProviderMap,
-            stageIdGenerator,
-            controlServer,
-            loggingServer,
-            retrievalServer,
-            provisioningServer,
-            dataServer,
-            stateServer)) {
+        createDefaultJobBundleFactory(envFactoryProviderMap)) {
       StageBundleFactory bf1 = bundleFactory.forStage(getExecutableStage(environment));
       StageBundleFactory bf2 = bundleFactory.forStage(getExecutableStage(environment));
       // NOTE: We hang on to stage bundle references to ensure their underlying environments are not
@@ -277,21 +386,22 @@ public class DefaultJobBundleFactoryTest {
         .thenReturn(CompletableFuture.completedFuture(instructionResponse));
 
     try (DefaultJobBundleFactory bundleFactory =
-        new DefaultJobBundleFactory(
-            envFactoryProviderMapFoo,
-            stageIdGenerator,
-            controlServer,
-            loggingServer,
-            retrievalServer,
-            provisioningServer,
-            dataServer,
-            stateServer)) {
+        createDefaultJobBundleFactory(envFactoryProviderMapFoo)) {
       bundleFactory.forStage(getExecutableStage(environment));
       bundleFactory.forStage(getExecutableStage(envFoo));
       verify(envFactory).createEnvironment(environment);
       verify(envFactory).createEnvironment(envFoo);
       verifyNoMoreInteractions(envFactory);
     }
+  }
+
+  private DefaultJobBundleFactory createDefaultJobBundleFactory(
+      Map<String, EnvironmentFactory.Provider> envFactoryProviderMap) {
+    return new DefaultJobBundleFactory(
+        JobInfo.create("testJob", "testJob", "token", Struct.getDefaultInstance()),
+        envFactoryProviderMap,
+        stageIdGenerator,
+        serverInfo);
   }
 
   private static ExecutableStage getExecutableStage(Environment environment) {
@@ -314,11 +424,8 @@ public class DefaultJobBundleFactoryTest {
                         "coder-id",
                         Coder.newBuilder()
                             .setSpec(
-                                SdkFunctionSpec.newBuilder()
-                                    .setSpec(
-                                        FunctionSpec.newBuilder()
-                                            .setUrn(ModelCoders.INTERVAL_WINDOW_CODER_URN)
-                                            .build())
+                                FunctionSpec.newBuilder()
+                                    .setUrn(ModelCoders.INTERVAL_WINDOW_CODER_URN)
                                     .build())
                             .build())
                     .build())

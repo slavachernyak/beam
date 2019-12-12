@@ -32,6 +32,8 @@ import zlib
 from builtins import range
 
 import crcmod
+# patches unittest.TestCase to be python3 compatible
+import future.tests.base  # pylint: disable=unused-import
 
 import apache_beam as beam
 from apache_beam import Create
@@ -110,7 +112,7 @@ class TestTFRecordUtil(unittest.TestCase):
       return bytes(l)
 
   def _test_error(self, record, error_text):
-    with self.assertRaisesRegexp(ValueError, re.escape(error_text)):
+    with self.assertRaisesRegex(ValueError, re.escape(error_text)):
       _TFRecordUtil.read_record(self._as_file_handle(record))
 
   def test_masked_crc32c(self):
@@ -216,7 +218,7 @@ class TestWriteToTFRecord(TestTFRecordSink):
     with TempDir() as temp_dir:
       file_path_prefix = temp_dir.create_temp_file('result')
       with TestPipeline() as p:
-        input_data = ['foo', 'bar']
+        input_data = [b'foo', b'bar']
         _ = p | beam.Create(input_data) | WriteToTFRecord(
             file_path_prefix, compression_type=CompressionTypes.GZIP)
 
@@ -226,13 +228,13 @@ class TestWriteToTFRecord(TestTFRecordSink):
           file_name, options=tf.python_io.TFRecordOptions(
               tf.python_io.TFRecordCompressionType.GZIP)):
         actual.append(r)
-      self.assertEqual(actual, input_data)
+      self.assertEqual(sorted(actual), sorted(input_data))
 
   def test_write_record_auto(self):
     with TempDir() as temp_dir:
       file_path_prefix = temp_dir.create_temp_file('result')
       with TestPipeline() as p:
-        input_data = ['foo', 'bar']
+        input_data = [b'foo', b'bar']
         _ = p | beam.Create(input_data) | WriteToTFRecord(
             file_path_prefix, file_name_suffix='.gz')
 
@@ -242,7 +244,7 @@ class TestWriteToTFRecord(TestTFRecordSink):
           file_name, options=tf.python_io.TFRecordOptions(
               tf.python_io.TFRecordCompressionType.GZIP)):
         actual.append(r)
-      self.assertEqual(actual, input_data)
+      self.assertEqual(sorted(actual), sorted(input_data))
 
 
 class TestReadFromTFRecord(unittest.TestCase):

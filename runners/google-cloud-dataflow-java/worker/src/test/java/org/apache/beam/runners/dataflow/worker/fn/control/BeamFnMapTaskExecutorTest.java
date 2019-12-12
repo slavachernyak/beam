@@ -45,6 +45,7 @@ import org.apache.beam.runners.core.StateInternals;
 import org.apache.beam.runners.core.TimerInternals;
 import org.apache.beam.runners.core.TimerInternals.TimerData;
 import org.apache.beam.runners.core.metrics.ExecutionStateTracker;
+import org.apache.beam.runners.core.metrics.MonitoringInfoConstants;
 import org.apache.beam.runners.dataflow.worker.DataflowExecutionContext.DataflowStepContext;
 import org.apache.beam.runners.dataflow.worker.counters.NameContext;
 import org.apache.beam.runners.dataflow.worker.fn.data.RemoteGrpcPortWriteOperation;
@@ -59,10 +60,10 @@ import org.apache.beam.sdk.fn.IdGenerators;
 import org.apache.beam.sdk.fn.data.RemoteGrpcPortRead;
 import org.apache.beam.sdk.transforms.windowing.BoundedWindow;
 import org.apache.beam.sdk.util.MoreFutures;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableList;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableMap;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ImmutableTable;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterables;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableList;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableMap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ImmutableTable;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Iterables;
 import org.joda.time.Instant;
 import org.junit.Before;
 import org.junit.Test;
@@ -140,9 +141,7 @@ public class BeamFnMapTaskExecutorTest {
                 return MoreFutures.supplyAsync(
                     () -> {
                       processBundleLatch.await();
-                      return responseFor(request)
-                          .setProcessBundle(BeamFnApi.ProcessBundleResponse.getDefaultInstance())
-                          .build();
+                      return responseFor(request).build();
                     });
               case PROCESS_BUNDLE_PROGRESS:
                 progressSentLatch.countDown();
@@ -184,6 +183,7 @@ public class BeamFnMapTaskExecutorTest {
             ImmutableMap.of(),
             ImmutableMap.of(),
             ImmutableTable.of(),
+            ImmutableMap.of(),
             mockContext);
 
     BeamFnMapTaskExecutor mapTaskExecutor =
@@ -236,9 +236,7 @@ public class BeamFnMapTaskExecutorTest {
                 return MoreFutures.supplyAsync(
                     () -> {
                       processBundleLatch.await();
-                      return responseFor(request)
-                          .setProcessBundle(BeamFnApi.ProcessBundleResponse.getDefaultInstance())
-                          .build();
+                      return responseFor(request).build();
                     });
               case PROCESS_BUNDLE_PROGRESS:
                 progressSentTwiceLatch.countDown();
@@ -287,6 +285,7 @@ public class BeamFnMapTaskExecutorTest {
             ImmutableMap.of(),
             ImmutableMap.of(),
             ImmutableTable.of(),
+            ImmutableMap.of(),
             mockContext);
 
     BeamFnMapTaskExecutor mapTaskExecutor =
@@ -396,6 +395,7 @@ public class BeamFnMapTaskExecutorTest {
             ImmutableMap.of(),
             ImmutableMap.of(),
             ImmutableTable.of(),
+            ImmutableMap.of(),
             mockContext);
 
     BeamFnMapTaskExecutor mapTaskExecutor =
@@ -458,9 +458,11 @@ public class BeamFnMapTaskExecutorTest {
     final int expectedCounterValue = 5;
     final MonitoringInfo expectedMonitoringInfo =
         MonitoringInfo.newBuilder()
-            .setUrn("beam:metric:user:ExpectedCounter")
-            .setType("beam:metrics:sum_int_64")
-            .putLabels("PTRANSFORM", "ExpectedPTransform")
+            .setUrn(MonitoringInfoConstants.Urns.USER_COUNTER)
+            .putLabels(MonitoringInfoConstants.Labels.NAME, "ExpectedCounter")
+            .putLabels(MonitoringInfoConstants.Labels.NAMESPACE, "anyString")
+            .setType(MonitoringInfoConstants.TypeUrns.SUM_INT64)
+            .putLabels(MonitoringInfoConstants.Labels.PTRANSFORM, "ExpectedPTransform")
             .setMetric(
                 Metric.newBuilder()
                     .setCounterData(
@@ -519,6 +521,7 @@ public class BeamFnMapTaskExecutorTest {
             stepContextMap,
             ImmutableMap.of(),
             ImmutableTable.of(),
+            ImmutableMap.of(),
             mockContext);
 
     BeamFnMapTaskExecutor mapTaskExecutor =
@@ -616,6 +619,20 @@ public class BeamFnMapTaskExecutorTest {
   }
 
   private BeamFnApi.InstructionResponse.Builder responseFor(BeamFnApi.InstructionRequest request) {
-    return BeamFnApi.InstructionResponse.newBuilder().setInstructionId(request.getInstructionId());
+    BeamFnApi.InstructionResponse.Builder response =
+        BeamFnApi.InstructionResponse.newBuilder().setInstructionId(request.getInstructionId());
+    if (request.hasRegister()) {
+      response.setRegister(BeamFnApi.RegisterResponse.getDefaultInstance());
+    } else if (request.hasProcessBundle()) {
+      response.setProcessBundle(BeamFnApi.ProcessBundleResponse.getDefaultInstance());
+    } else if (request.hasFinalizeBundle()) {
+      response.setFinalizeBundle(BeamFnApi.FinalizeBundleResponse.getDefaultInstance());
+    } else if (request.hasProcessBundleProgress()) {
+      response.setProcessBundleProgress(
+          BeamFnApi.ProcessBundleProgressResponse.getDefaultInstance());
+    } else if (request.hasProcessBundleSplit()) {
+      response.setProcessBundleSplit(BeamFnApi.ProcessBundleSplitResponse.getDefaultInstance());
+    }
+    return response;
   }
 }

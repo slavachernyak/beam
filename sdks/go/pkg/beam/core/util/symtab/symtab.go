@@ -23,16 +23,44 @@ import (
 	"debug/pe"
 	"fmt"
 	"os"
+	"reflect"
+	"runtime"
+
+	"github.com/apache/beam/sdks/go/pkg/beam/internal/errors"
 )
 
 // SymbolTable allows for mapping between symbols and their addresses.
 type SymbolTable struct {
-	data *dwarf.Data
+	data   *dwarf.Data
+	offset uintptr // offset between file addresses and runtime addresses
 }
 
 // New creates a new symbol table based on the debug info
 // read from the specified file.
 func New(filename string) (*SymbolTable, error) {
+	d, err := dwarfData(filename)
+	if err != nil {
+		return nil, err
+	}
+
+	sym := &SymbolTable{data: d}
+
+	// Work out the offset between the file addresses and the
+	// runtime addreses, in case this is a position independent
+	// executable.
+	runtimeAddr := reflect.ValueOf(New).Pointer()
+	name := fnname()
+	fileAddr, err := sym.Sym2Addr(name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to reverse lookup known function %s: %v", name, err)
+	}
+	sym.offset = runtimeAddr - fileAddr
+
+	return sym, nil
+}
+
+// dwarfData returns the debug info for the specified file.
+func dwarfData(filename string) (*dwarf.Data, error) {
 	f, err := os.Open(filename)
 	if err != nil {
 		return nil, err
@@ -48,9 +76,9 @@ func New(filename string) (*SymbolTable, error) {
 		d, err := ef.DWARF()
 		if err != nil {
 			f.Close()
-			return nil, fmt.Errorf("No working DWARF: %v", err)
+			return nil, errors.Wrap(err, "No working DWARF")
 		}
-		return &SymbolTable{d}, nil
+		return d, nil
 	}
 
 	// then Mach-O
@@ -59,9 +87,9 @@ func New(filename string) (*SymbolTable, error) {
 		d, err := mf.DWARF()
 		if err != nil {
 			f.Close()
-			return nil, fmt.Errorf("No working DWARF: %v", err)
+			return nil, errors.Wrap(err, "No working DWARF")
 		}
-		return &SymbolTable{d}, nil
+		return d, nil
 	}
 
 	// finally try Windows PE format
@@ -70,18 +98,28 @@ func New(filename string) (*SymbolTable, error) {
 		d, err := pf.DWARF()
 		if err != nil {
 			f.Close()
-			return nil, fmt.Errorf("No working DWARF: %v", err)
+			return nil, errors.Wrap(err, "No working DWARF")
 		}
-		return &SymbolTable{d}, nil
+		return d, nil
 	}
 
 	// Give up, we don't recognize it
 	f.Close()
-	return nil, fmt.Errorf("Unknown file format")
+	return nil, errors.New("Unknown file format")
+}
+
+// fnname returns the name of the function that called it.
+func fnname() string {
+	var pcs [2]uintptr
+	n := runtime.Callers(2, pcs[:])
+	frames := runtime.CallersFrames(pcs[:n])
+	frame, _ := frames.Next()
+	return frame.Func.Name()
 }
 
 // Addr2Sym returns the symbol name for the provided address.
 func (s *SymbolTable) Addr2Sym(addr uintptr) (string, error) {
+	addr -= s.offset
 	reader := s.data.Reader()
 	for {
 		e, err := reader.Next()
@@ -100,7 +138,7 @@ func (s *SymbolTable) Addr2Sym(addr uintptr) (string, error) {
 			}
 		}
 	}
-	return "", fmt.Errorf("no symbol found at address %x", addr)
+	return "", errors.Errorf("no symbol found at address %x", addr)
 }
 
 // Sym2Addr returns the address of the provided symbol name.
@@ -116,13 +154,13 @@ func (s *SymbolTable) Sym2Addr(symbol string) (uintptr, error) {
 			break
 		}
 
-		if e.Tag == dwarf.TagSubprogram {
+		if e.Tag == dwarf.TagSubprogram && len(e.Field) >= 2 {
 			nf := e.Field[0]
 			if nf.Attr.String() == "Name" && nf.Val.(string) == symbol {
 				addr := e.Field[1].Val.(uint64)
-				return uintptr(addr), nil
+				return uintptr(addr) + s.offset, nil
 			}
 		}
 	}
-	return 0, fmt.Errorf("no symbol %q", symbol)
+	return 0, errors.Errorf("no symbol %q", symbol)
 }

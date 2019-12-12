@@ -26,6 +26,7 @@ import static org.powermock.api.mockito.PowerMockito.mockStatic;
 
 import org.apache.beam.model.pipeline.v1.MetricsApi.MonitoringInfo;
 import org.apache.beam.runners.core.metrics.MetricsContainerStepMap;
+import org.apache.beam.runners.core.metrics.MonitoringInfoConstants;
 import org.apache.beam.runners.core.metrics.SimpleMonitoringInfoBuilder;
 import org.apache.beam.sdk.fn.data.FnDataReceiver;
 import org.apache.beam.sdk.metrics.MetricsEnvironment;
@@ -63,14 +64,14 @@ public class ElementCountFnDataReceiverTest {
     verify(consumer, times(numElements)).accept(element);
 
     SimpleMonitoringInfoBuilder builder = new SimpleMonitoringInfoBuilder();
-    builder.setUrn(SimpleMonitoringInfoBuilder.ELEMENT_COUNT_URN);
-    builder.setPCollectionLabel(pCollectionA);
+    builder.setUrn(MonitoringInfoConstants.Urns.ELEMENT_COUNT);
+    builder.setLabel(MonitoringInfoConstants.Labels.PCOLLECTION, pCollectionA);
     builder.setInt64Value(numElements);
     MonitoringInfo expected = builder.build();
 
     // Clear the timestamp before comparison.
     MonitoringInfo first = metricsContainerRegistry.getMonitoringInfos().iterator().next();
-    MonitoringInfo result = SimpleMonitoringInfoBuilder.clearTimestamp(first);
+    MonitoringInfo result = SimpleMonitoringInfoBuilder.copyAndClearTimestamp(first);
     assertEquals(expected, result);
   }
 
@@ -91,7 +92,7 @@ public class ElementCountFnDataReceiverTest {
     verify(consumer, times(1)).accept(element);
 
     // Verify that static scopedMetricsContainer is called with unbound container.
-    PowerMockito.verifyStatic(times(1));
+    PowerMockito.verifyStatic(MetricsEnvironment.class, times(1));
     MetricsEnvironment.scopedMetricsContainer(metricsContainerRegistry.getUnboundContainer());
   }
 }

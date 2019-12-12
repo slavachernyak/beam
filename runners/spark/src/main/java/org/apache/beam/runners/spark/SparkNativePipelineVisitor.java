@@ -30,8 +30,8 @@ import org.apache.beam.sdk.transforms.MapElements;
 import org.apache.beam.sdk.transforms.PTransform;
 import org.apache.beam.sdk.values.PInput;
 import org.apache.beam.sdk.values.POutput;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.base.Joiner;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Lists;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Joiner;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Lists;
 import org.apache.commons.lang3.StringUtils;
 
 /**
@@ -77,8 +77,8 @@ public class SparkNativePipelineVisitor extends SparkRunner.Evaluator {
 
   private boolean shouldDebug(final TransformHierarchy.Node node) {
     return node == null
-        || (!transforms.stream()
-                .anyMatch(
+        || (transforms.stream()
+                .noneMatch(
                     debugTransform ->
                         debugTransform.getNode().equals(node) && debugTransform.isComposite())
             && shouldDebug(node.getEnclosingNode()));
@@ -89,7 +89,6 @@ public class SparkNativePipelineVisitor extends SparkRunner.Evaluator {
       TransformHierarchy.Node node) {
     @SuppressWarnings("unchecked")
     TransformT transform = (TransformT) node.getTransform();
-    @SuppressWarnings("unchecked")
     TransformEvaluator<TransformT> evaluator = translate(node, transform);
     if (shouldDebug(node)) {
       transforms.add(new NativeTransform(node, evaluator, transform, false));

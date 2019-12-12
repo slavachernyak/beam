@@ -26,14 +26,14 @@ import org.apache.beam.model.pipeline.v1.MetricsApi.MonitoringInfo;
 import org.apache.beam.runners.core.metrics.ExecutionStateTracker;
 import org.apache.beam.runners.core.metrics.MetricsContainerImpl;
 import org.apache.beam.runners.core.metrics.MetricsContainerStepMap;
+import org.apache.beam.runners.core.metrics.MonitoringInfoConstants;
 import org.apache.beam.runners.core.metrics.SimpleExecutionState;
-import org.apache.beam.runners.core.metrics.SimpleMonitoringInfoBuilder;
 import org.apache.beam.runners.core.metrics.SimpleStateRegistry;
 import org.apache.beam.sdk.fn.data.FnDataReceiver;
 import org.apache.beam.sdk.metrics.MetricsEnvironment;
 import org.apache.beam.sdk.util.WindowedValue;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ArrayListMultimap;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.ListMultimap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ArrayListMultimap;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.ListMultimap;
 
 /**
  * The {@code PCollectionConsumerRegistry} is used to maintain a collection of consuming
@@ -86,11 +86,11 @@ public class PCollectionConsumerRegistry {
     }
 
     HashMap<String, String> labelsMetadata = new HashMap<String, String>();
-    labelsMetadata.put(SimpleMonitoringInfoBuilder.PTRANSFORM_LABEL, pTransformId);
+    labelsMetadata.put(MonitoringInfoConstants.Labels.PTRANSFORM, pTransformId);
     SimpleExecutionState state =
         new SimpleExecutionState(
             ExecutionStateTracker.PROCESS_STATE_NAME,
-            SimpleMonitoringInfoBuilder.PROCESS_BUNDLE_MSECS_URN,
+            MonitoringInfoConstants.Urns.PROCESS_BUNDLE_MSECS,
             labelsMetadata);
     executionStates.register(state);
     // Wrap the consumer with extra logic to set the metric container with the appropriate
@@ -107,6 +107,11 @@ public class PCollectionConsumerRegistry {
           }
         };
     pCollectionIdsToConsumers.put(pCollectionId, (FnDataReceiver) wrapAndEnableMetricContainer);
+  }
+
+  /** Reset the execution states of the registered functions. */
+  public void reset() {
+    executionStates.reset();
   }
 
   /** @return the list of pcollection ids. */

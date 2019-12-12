@@ -20,12 +20,14 @@ package org.apache.beam.runners.fnexecution.jobsubmission;
 import java.io.IOException;
 import java.nio.file.Paths;
 import org.apache.beam.model.pipeline.v1.Endpoints;
+import org.apache.beam.runners.core.construction.expansion.ExpansionServer;
+import org.apache.beam.runners.core.construction.expansion.ExpansionService;
 import org.apache.beam.runners.fnexecution.GrpcFnServer;
 import org.apache.beam.runners.fnexecution.ServerFactory;
 import org.apache.beam.runners.fnexecution.artifact.BeamFileSystemArtifactStagingService;
-import org.apache.beam.runners.fnexecution.expansion.ExpansionService;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.annotations.VisibleForTesting;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.annotations.VisibleForTesting;
 import org.kohsuke.args4j.Option;
+import org.kohsuke.args4j.spi.ExplicitBooleanOptionHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,19 +40,21 @@ public abstract class JobServerDriver implements Runnable {
 
   private final ServerFactory jobServerFactory;
   private final ServerFactory artifactServerFactory;
-  private final ServerFactory expansionServerFactory;
+  private final JobInvokerFactory jobInvokerFactory;
 
   private volatile GrpcFnServer<InMemoryJobService> jobServer;
   private volatile GrpcFnServer<BeamFileSystemArtifactStagingService> artifactStagingServer;
-  private volatile GrpcFnServer<ExpansionService> expansionServer;
+  private volatile ExpansionServer expansionServer;
 
-  protected abstract JobInvoker createJobInvoker();
+  public interface JobInvokerFactory {
+    JobInvoker create();
+  }
 
   protected InMemoryJobService createJobService() throws IOException {
     artifactStagingServer = createArtifactStagingService();
     expansionServer = createExpansionService();
 
-    JobInvoker invoker = createJobInvoker();
+    JobInvoker invoker = jobInvokerFactory.create();
     return InMemoryJobService.create(
         artifactStagingServer.getApiServiceDescriptor(),
         this::createSessionToken,
@@ -88,13 +92,10 @@ public abstract class JobServerDriver implements Runnable {
 
     @Option(
         name = "--clean-artifacts-per-job",
-        usage = "When true, remove each job's staged artifacts when it completes")
-    private boolean cleanArtifactsPerJob = false;
-
-    @Option(
-        name = "--sdk-worker-parallelism",
-        usage = "Default parallelism for SDK worker processes (see portable pipeline options)")
-    private Long sdkWorkerParallelism = 1L;
+        usage = "When true, remove each job's staged artifacts when it completes",
+        // Allows setting boolean parameters to false which default to true
+        handler = ExplicitBooleanOptionHandler.class)
+    private boolean cleanArtifactsPerJob = true;
 
     public String getHost() {
       return host;
@@ -119,10 +120,6 @@ public abstract class JobServerDriver implements Runnable {
     public boolean isCleanArtifactsPerJob() {
       return cleanArtifactsPerJob;
     }
-
-    public Long getSdkWorkerParallelism() {
-      return this.sdkWorkerParallelism;
-    }
   }
 
   protected static ServerFactory createJobServerFactory(ServerConfiguration configuration) {
@@ -133,19 +130,20 @@ public abstract class JobServerDriver implements Runnable {
     return ServerFactory.createWithPortSupplier(() -> configuration.artifactPort);
   }
 
-  protected static ServerFactory createExpansionServerFactory(ServerConfiguration configuration) {
-    return ServerFactory.createWithPortSupplier(() -> configuration.expansionPort);
-  }
-
   protected JobServerDriver(
       ServerConfiguration configuration,
       ServerFactory jobServerFactory,
       ServerFactory artifactServerFactory,
-      ServerFactory expansionServerFactory) {
+      JobInvokerFactory jobInvokerFactory) {
     this.configuration = configuration;
     this.jobServerFactory = jobServerFactory;
     this.artifactServerFactory = artifactServerFactory;
-    this.expansionServerFactory = expansionServerFactory;
+    this.jobInvokerFactory = jobInvokerFactory;
+  }
+
+  // Can be used to discover the address of the job server, and if it is ready
+  public String getJobServerUrl() {
+    return (jobServer != null) ? jobServer.getApiServiceDescriptor().getUrl() : null;
   }
 
   // This method is executed by TestPortableRunner via Reflection
@@ -195,7 +193,8 @@ public abstract class JobServerDriver implements Runnable {
     if (expansionServer != null) {
       try {
         expansionServer.close();
-        LOG.info("Expansion stopped on {}", expansionServer.getApiServiceDescriptor().getUrl());
+        LOG.info(
+            "Expansion stopped on {}:{}", expansionServer.getHost(), expansionServer.getPort());
         expansionServer = null;
       } catch (Exception e) {
         LOG.error("Error while closing the Expansion Service.", e);
@@ -244,23 +243,14 @@ public abstract class JobServerDriver implements Runnable {
     return artifactStagingService;
   }
 
-  private GrpcFnServer<ExpansionService> createExpansionService() throws IOException {
-    ExpansionService service = new ExpansionService();
-    GrpcFnServer<ExpansionService> expansionServiceGrpcFnServer;
-    if (configuration.expansionPort == 0) {
-      expansionServiceGrpcFnServer =
-          GrpcFnServer.allocatePortAndCreateFor(service, expansionServerFactory);
-    } else {
-      Endpoints.ApiServiceDescriptor descriptor =
-          Endpoints.ApiServiceDescriptor.newBuilder()
-              .setUrl(configuration.host + ":" + configuration.expansionPort)
-              .build();
-      expansionServiceGrpcFnServer =
-          GrpcFnServer.create(service, descriptor, expansionServerFactory);
-    }
+  private ExpansionServer createExpansionService() throws IOException {
+    ExpansionServer expansionServer =
+        ExpansionServer.create(
+            new ExpansionService(), configuration.host, configuration.expansionPort);
     LOG.info(
-        "Java ExpansionService started on {}",
-        expansionServiceGrpcFnServer.getApiServiceDescriptor().getUrl());
-    return expansionServiceGrpcFnServer;
+        "Java ExpansionService started on {}:{}",
+        expansionServer.getHost(),
+        expansionServer.getPort());
+    return expansionServer;
   }
 }

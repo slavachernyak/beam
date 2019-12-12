@@ -29,6 +29,7 @@ import apache_beam as beam
 from apache_beam import Create
 from apache_beam import DoFn
 from apache_beam.io import filebasedsource_test
+from apache_beam.io.restriction_trackers import OffsetRange
 from apache_beam.io.restriction_trackers import OffsetRestrictionTracker
 from apache_beam.pvalue import AsList
 from apache_beam.pvalue import AsSingleton
@@ -45,10 +46,13 @@ class ReadFilesProvider(RestrictionProvider):
 
   def initial_restriction(self, element):
     size = os.path.getsize(element)
-    return (0, size)
+    return OffsetRange(0, size)
 
   def create_tracker(self, restriction):
-    return OffsetRestrictionTracker(*restriction)
+    return OffsetRestrictionTracker(restriction)
+
+  def restriction_size(self, element, restriction):
+    return restriction.size()
 
 
 class ReadFiles(DoFn):
@@ -57,14 +61,16 @@ class ReadFiles(DoFn):
     self._resume_count = resume_count
 
   def process(
-      self, element, restriction_tracker=ReadFilesProvider(), *args, **kwargs):
+      self,
+      element,
+      restriction_tracker=DoFn.RestrictionParam(ReadFilesProvider()),
+      *args, **kwargs):
     file_name = element
-    assert isinstance(restriction_tracker, OffsetRestrictionTracker)
 
     with open(file_name, 'rb') as file:
-      pos = restriction_tracker.start_position()
-      if restriction_tracker.start_position() > 0:
-        file.seek(restriction_tracker.start_position() - 1)
+      pos = restriction_tracker.current_restriction().start
+      if restriction_tracker.current_restriction().start > 0:
+        file.seek(restriction_tracker.current_restriction().start - 1)
         line = file.readline()
         pos = pos - 1 + len(line)
 
@@ -91,13 +97,17 @@ class ReadFiles(DoFn):
 class ExpandStringsProvider(RestrictionProvider):
 
   def initial_restriction(self, element):
-    return (0, len(element[0]))
+    return OffsetRange(0, len(element[0]))
 
   def create_tracker(self, restriction):
-    return OffsetRestrictionTracker(restriction[0], restriction[1])
+    return OffsetRestrictionTracker(restriction)
 
+  # No initial split performed.
   def split(self, element, restriction):
     return [restriction,]
+
+  def restriction_size(self, element, restriction):
+    return restriction.size()
 
 
 class ExpandStrings(DoFn):
@@ -107,16 +117,15 @@ class ExpandStrings(DoFn):
 
   def process(
       self, element, side1, side2, side3, window=beam.DoFn.WindowParam,
-      restriction_tracker=ExpandStringsProvider(),
+      restriction_tracker=DoFn.RestrictionParam(ExpandStringsProvider()),
       *args, **kwargs):
     side = []
     side.extend(side1)
     side.extend(side2)
     side.extend(side3)
-    assert isinstance(restriction_tracker, OffsetRestrictionTracker)
     side = list(side)
-    for i in range(restriction_tracker.start_position(),
-                   restriction_tracker.stop_position()):
+    for i in range(restriction_tracker.current_restriction().start,
+                   restriction_tracker.current_restriction().stop):
       if restriction_tracker.try_claim(i):
         if not side:
           yield (
@@ -138,8 +147,16 @@ class SDFDirectRunnerTest(unittest.TestCase):
     super(SDFDirectRunnerTest, self).setUp()
     # Importing following for DirectRunner SDF implemenation for testing.
     from apache_beam.runners.direct import transform_evaluator
-    self._default_max_num_outputs = (
+    self._old_default_max_num_outputs = (
         transform_evaluator._ProcessElementsEvaluator.DEFAULT_MAX_NUM_OUTPUTS)
+    self._default_max_num_outputs = (
+        transform_evaluator._ProcessElementsEvaluator.DEFAULT_MAX_NUM_OUTPUTS
+        ) = 100
+
+  def tearDown(self):
+    from apache_beam.runners.direct import transform_evaluator
+    transform_evaluator._ProcessElementsEvaluator.DEFAULT_MAX_NUM_OUTPUTS = (
+        self._old_default_max_num_outputs)
 
   def run_sdf_read_pipeline(
       self, num_files, num_records_per_file, resume_count=None):

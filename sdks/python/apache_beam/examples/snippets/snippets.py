@@ -33,8 +33,10 @@ from __future__ import absolute_import
 from __future__ import division
 
 import argparse
+import base64
 from builtins import object
 from builtins import range
+from decimal import Decimal
 
 from past.builtins import unicode
 
@@ -172,33 +174,34 @@ def model_pipelines(argv):
 
 def model_pcollection(argv):
   """Creating a PCollection from data in local memory."""
+  # [START model_pcollection]
+  import apache_beam as beam
   from apache_beam.options.pipeline_options import PipelineOptions
 
-  class MyOptions(PipelineOptions):
-
-    @classmethod
-    def _add_argparse_args(cls, parser):
-      parser.add_argument('--output',
-                          dest='output',
-                          required=True,
-                          help='Output file to write results to.')
-
+  # argv = None  # if None, uses sys.argv
   pipeline_options = PipelineOptions(argv)
-  my_options = pipeline_options.view_as(MyOptions)
-
-  # [START model_pcollection]
-  with beam.Pipeline(options=pipeline_options) as p:
-
-    lines = (p
-             | beam.Create([
-                 'To be, or not to be: that is the question: ',
-                 'Whether \'tis nobler in the mind to suffer ',
-                 'The slings and arrows of outrageous fortune, ',
-                 'Or to take arms against a sea of troubles, ']))
+  with beam.Pipeline(options=pipeline_options) as pipeline:
+    lines = (
+        pipeline
+        | beam.Create([
+            'To be, or not to be: that is the question: ',
+            "Whether 'tis nobler in the mind to suffer ",
+            'The slings and arrows of outrageous fortune, ',
+            'Or to take arms against a sea of troubles, ',
+        ])
+    )
     # [END model_pcollection]
 
-    (lines
-     | beam.io.WriteToText(my_options.output))
+    class MyOptions(PipelineOptions):
+      @classmethod
+      def _add_argparse_args(cls, parser):
+        parser.add_argument('--output',
+                            dest='output',
+                            required=True,
+                            help='Output file to write results to.')
+
+    my_options = pipeline_options.view_as(MyOptions)
+    lines | beam.io.WriteToText(my_options.output)
 
 
 def pipeline_options_remote(argv):
@@ -444,7 +447,7 @@ def examples_wordcount_minimal(renames):
       # [END examples_wordcount_minimal_count]
 
       # [START examples_wordcount_minimal_map]
-      | beam.Map(lambda word_count: '%s: %s' % (word_count[0], word_count[1]))
+      | beam.MapTuple(lambda word, count: '%s: %s' % (word, count))
       # [END examples_wordcount_minimal_map]
 
       # [START examples_wordcount_minimal_write]
@@ -636,8 +639,6 @@ def examples_wordcount_debugging(renames):
 def examples_wordcount_streaming(argv):
   import apache_beam as beam
   from apache_beam import window
-  from apache_beam.io import ReadFromPubSub
-  from apache_beam.io import WriteStringsToPubSub
   from apache_beam.options.pipeline_options import PipelineOptions
   from apache_beam.options.pipeline_options import StandardOptions
 
@@ -751,22 +752,22 @@ class CountingSource(iobase.BoundedSource):
     return OffsetRangeTracker(start_position, stop_position)
 
   def read(self, range_tracker):
-    for i in range(self._count):
+    for i in range(range_tracker.start_position(),
+                   range_tracker.stop_position()):
       if not range_tracker.try_claim(i):
         return
       self.records_read.inc()
       yield i
 
-  def split(self, desired_bundle_size, start_position=None,
-            stop_position=None):
+  def split(self, desired_bundle_size, start_position=None, stop_position=None):
     if start_position is None:
       start_position = 0
     if stop_position is None:
       stop_position = self._count
 
     bundle_start = start_position
-    while bundle_start < self._count:
-      bundle_stop = max(self._count, bundle_start + desired_bundle_size)
+    while bundle_start < stop_position:
+      bundle_stop = min(stop_position, bundle_start + desired_bundle_size)
       yield iobase.SourceBundle(weight=(bundle_stop - bundle_start),
                                 source=self,
                                 start_position=bundle_start,
@@ -908,9 +909,9 @@ class SimpleKVWriter(iobase.Writer):
 # [START model_custom_sink_new_ptransform]
 class WriteToKVSink(PTransform):
 
-  def __init__(self, simplekv, url, final_table_name, **kwargs):
+  def __init__(self, simplekv, url, final_table_name):
     self._simplekv = simplekv
-    super(WriteToKVSink, self).__init__(**kwargs)
+    super(WriteToKVSink, self).__init__()
     self._url = url
     self._final_table_name = final_table_name
 
@@ -1081,6 +1082,22 @@ def model_bigqueryio(p, write_project='', write_dataset='', write_table=''):
       tableId='weather_stations')
   # [END model_bigqueryio_table_spec_object]
 
+  # [START model_bigqueryio_data_types]
+  bigquery_data = [{
+      'string': 'abc',
+      'bytes': base64.b64encode(b'\xab\xac'),
+      'integer': 5,
+      'float': 0.5,
+      'numeric': Decimal('5'),
+      'boolean': True,
+      'timestamp': '2018-12-31 12:44:31.744957 UTC',
+      'date': '2018-12-31',
+      'time': '12:44:31',
+      'datetime': '2018-12-31T12:44:31',
+      'geography': 'POINT(30 10)'
+  }]
+  # [END model_bigqueryio_data_types]
+
   # [START model_bigqueryio_read_table]
   max_temperatures = (
       p
@@ -1127,7 +1144,7 @@ def model_bigqueryio(p, write_project='', write_dataset='', write_table=''):
 
   # [START model_bigqueryio_write_input]
   quotes = p | beam.Create([
-      {'source': 'Mahatma Ghandi', 'quote': 'My life is my message.'},
+      {'source': 'Mahatma Gandhi', 'quote': 'My life is my message.'},
       {'source': 'Yoda', 'quote': "Do, or do not. There is no 'try'."},
   ])
   # [END model_bigqueryio_write_input]
@@ -1335,3 +1352,68 @@ class Count(beam.PTransform):
         | 'PairWithOne' >> beam.Map(lambda v: (v, 1))
         | beam.CombinePerKey(sum))
 # [END model_library_transforms_count]
+
+
+def file_process_pattern_access_metadata():
+
+  import apache_beam as beam
+  from apache_beam.io import fileio
+
+  # [START FileProcessPatternAccessMetadataSnip1]
+  with beam.Pipeline() as p:
+    readable_files = (p
+                      | fileio.MatchFiles('hdfs://path/to/*.txt')
+                      | fileio.ReadMatches()
+                      | beam.Reshuffle())
+    files_and_contents = (readable_files
+                          | beam.Map(lambda x: (x.metadata.path,
+                                                x.read_utf8())))
+  # [END FileProcessPatternAccessMetadataSnip1]
+
+
+def accessing_valueprovider_info_after_run():
+  # [START AccessingValueProviderInfoAfterRunSnip1]
+  import logging
+
+  import apache_beam as beam
+  from apache_beam.options.pipeline_options import PipelineOptions
+  from apache_beam.utils.value_provider import RuntimeValueProvider
+
+  class MyOptions(PipelineOptions):
+    @classmethod
+    def _add_argparse_args(cls, parser):
+      parser.add_value_provider_argument('--string_value', type=str)
+
+  class LogValueProvidersFn(beam.DoFn):
+    def __init__(self, string_vp):
+      self.string_vp = string_vp
+
+    # Define the DoFn that logs the ValueProvider value.
+    # The DoFn is called when creating the pipeline branch.
+    # This example logs the ValueProvider value, but
+    # you could store it by pushing it to an external database.
+    def process(self, an_int):
+      logging.info('The string_value is %s' % self.string_vp.get())
+      # Another option (where you don't need to pass the value at all) is:
+      logging.info('The string value is %s' %
+                   RuntimeValueProvider.get_value('string_value', str, ''))
+
+  pipeline_options = PipelineOptions()
+  # Create pipeline.
+  p = beam.Pipeline(options=pipeline_options)
+
+  my_options = pipeline_options.view_as(MyOptions)
+  # Add a branch for logging the ValueProvider value.
+  _ = (p
+       | beam.Create([None])
+       | 'LogValueProvs' >> beam.ParDo(
+           LogValueProvidersFn(my_options.string_value)))
+
+  # The main pipeline.
+  result_pc = (p
+               | "main_pc" >> beam.Create([1, 2, 3])
+               | beam.combiners.Sum.Globally())
+
+  p.run().wait_until_finish()
+
+  # [END AccessingValueProviderInfoAfterRunSnip1]

@@ -17,6 +17,7 @@
  */
 package org.apache.beam.runners.samza.translation;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -24,13 +25,27 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.apache.beam.model.pipeline.v1.RunnerApi;
+import org.apache.beam.runners.core.construction.RehydratedComponents;
+import org.apache.beam.runners.core.construction.WindowingStrategyTranslation;
 import org.apache.beam.runners.core.construction.graph.PipelineNode;
+import org.apache.beam.runners.core.construction.graph.QueryablePipeline;
+import org.apache.beam.runners.fnexecution.wire.WireCoders;
 import org.apache.beam.runners.samza.SamzaPipelineOptions;
 import org.apache.beam.runners.samza.runtime.OpMessage;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterables;
+import org.apache.beam.runners.samza.util.HashIdGenerator;
+import org.apache.beam.sdk.transforms.windowing.BoundedWindow;
+import org.apache.beam.sdk.util.WindowedValue;
+import org.apache.beam.sdk.values.WindowingStrategy;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Iterables;
+import org.apache.samza.application.descriptors.StreamApplicationDescriptor;
+import org.apache.samza.operators.KV;
 import org.apache.samza.operators.MessageStream;
 import org.apache.samza.operators.OutputStream;
-import org.apache.samza.operators.StreamGraph;
+import org.apache.samza.system.descriptors.InputDescriptor;
+import org.apache.samza.system.descriptors.OutputDescriptor;
+import org.apache.samza.table.Table;
+import org.apache.samza.table.descriptors.TableDescriptor;
 
 /**
  * Helper that keeps the mapping from BEAM PCollection id to Samza {@link MessageStream}. It also
@@ -39,26 +54,22 @@ import org.apache.samza.operators.StreamGraph;
  */
 public class PortableTranslationContext {
   private final Map<String, MessageStream<?>> messsageStreams = new HashMap<>();
-  private final StreamGraph streamGraph;
+  private final StreamApplicationDescriptor appDescriptor;
   private final SamzaPipelineOptions options;
-  private int topologicalId;
   private final Set<String> registeredInputStreams = new HashSet<>();
+  private final Map<String, Table> registeredTables = new HashMap<>();
+  private final HashIdGenerator idGenerator = new HashIdGenerator();
 
-  public PortableTranslationContext(StreamGraph streamGraph, SamzaPipelineOptions options) {
-    this.streamGraph = streamGraph;
+  private PipelineNode.PTransformNode currentTransform;
+
+  public PortableTranslationContext(
+      StreamApplicationDescriptor appDescriptor, SamzaPipelineOptions options) {
+    this.appDescriptor = appDescriptor;
     this.options = options;
   }
 
   public SamzaPipelineOptions getSamzaPipelineOptions() {
     return this.options;
-  }
-
-  public void setCurrentTopologicalId(int id) {
-    this.topologicalId = id;
-  }
-
-  public int getCurrentTopologicalId() {
-    return this.topologicalId;
   }
 
   public <T> List<MessageStream<OpMessage<T>>> getAllInputMessageStreams(
@@ -93,33 +104,86 @@ public class PortableTranslationContext {
     messsageStreams.put(id, stream);
   }
 
-  /** Register an input stream, using the PCollection id as the config id. */
-  public void registerInputMessageStream(String id) {
-    registerInputMessageStreamWithStreamId(id, id);
+  /** Get output stream by output descriptor. */
+  public <OutT> OutputStream<OutT> getOutputStream(OutputDescriptor<OutT, ?> outputDescriptor) {
+    return appDescriptor.getOutputStream(outputDescriptor);
   }
 
-  /** Get output stream by stream id. */
-  public <T> OutputStream<T> getOutputStreamById(String outputStreamId) {
-    return streamGraph.getOutputStream(outputStreamId);
-  }
-
-  /**
-   * Register an input stream with certain config id.
-   *
-   * @param id id of the PCollection in the input/output of PTransform
-   * @param streamId samza stream id which user can use to customize the stream level config
-   */
-  public <T> void registerInputMessageStreamWithStreamId(String id, String streamId) {
+  /** Register an input stream with certain config id. */
+  public <T> void registerInputMessageStream(
+      String id, InputDescriptor<KV<?, OpMessage<T>>, ?> inputDescriptor) {
     // we want to register it with the Samza graph only once per i/o stream
+    final String streamId = inputDescriptor.getStreamId();
     if (registeredInputStreams.contains(streamId)) {
       return;
     }
     final MessageStream<OpMessage<T>> stream =
-        streamGraph
-            .<org.apache.samza.operators.KV<?, OpMessage<T>>>getInputStream(streamId)
-            .map(org.apache.samza.operators.KV::getValue);
+        appDescriptor.getInputStream(inputDescriptor).map(org.apache.samza.operators.KV::getValue);
 
     registerMessageStream(id, stream);
     registeredInputStreams.add(streamId);
+  }
+
+  public WindowedValue.WindowedValueCoder instantiateCoder(
+      String collectionId, RunnerApi.Components components) {
+    PipelineNode.PCollectionNode collectionNode =
+        PipelineNode.pCollection(collectionId, components.getPcollectionsOrThrow(collectionId));
+    try {
+      return (WindowedValue.WindowedValueCoder)
+          WireCoders.instantiateRunnerWireCoder(collectionNode, components);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  public WindowingStrategy<?, BoundedWindow> getPortableWindowStrategy(
+      PipelineNode.PTransformNode transform, QueryablePipeline pipeline) {
+    String inputId = Iterables.getOnlyElement(transform.getTransform().getInputsMap().values());
+    RehydratedComponents rehydratedComponents =
+        RehydratedComponents.forComponents(pipeline.getComponents());
+
+    RunnerApi.WindowingStrategy windowingStrategyProto =
+        pipeline
+            .getComponents()
+            .getWindowingStrategiesOrThrow(
+                pipeline.getComponents().getPcollectionsOrThrow(inputId).getWindowingStrategyId());
+
+    WindowingStrategy<?, ?> windowingStrategy;
+    try {
+      windowingStrategy =
+          WindowingStrategyTranslation.fromProto(windowingStrategyProto, rehydratedComponents);
+    } catch (Exception e) {
+      throw new IllegalStateException(
+          String.format(
+              "Unable to hydrate GroupByKey windowing strategy %s.", windowingStrategyProto),
+          e);
+    }
+
+    @SuppressWarnings("unchecked")
+    WindowingStrategy<?, BoundedWindow> ret =
+        (WindowingStrategy<?, BoundedWindow>) windowingStrategy;
+    return ret;
+  }
+
+  @SuppressWarnings("unchecked")
+  public <K, V> Table<KV<K, V>> getTable(TableDescriptor<K, V, ?> tableDesc) {
+    return registeredTables.computeIfAbsent(
+        tableDesc.getTableId(), id -> appDescriptor.getTable(tableDesc));
+  }
+
+  public void setCurrentTransform(PipelineNode.PTransformNode currentTransform) {
+    this.currentTransform = currentTransform;
+  }
+
+  public void clearCurrentTransform() {
+    this.currentTransform = null;
+  }
+
+  public String getTransformFullName() {
+    return currentTransform.getTransform().getUniqueName();
+  }
+
+  public String getTransformId() {
+    return idGenerator.getId(currentTransform.getTransform().getUniqueName());
   }
 }

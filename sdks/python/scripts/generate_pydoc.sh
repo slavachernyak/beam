@@ -29,7 +29,7 @@ if [[ $PWD != *sdks/python* ]]; then
 fi
 
 # Go to the Apache Beam Python SDK root
-if [[ "*sdks/python" != $PWD ]]; then
+if [[ $PWD != *sdks/python ]]; then
   cd $(pwd | sed 's/sdks\/python.*/sdks\/python/')
 fi
 
@@ -55,6 +55,9 @@ excluded_patterns=(
     apache_beam/examples/
     apache_beam/internal/clients/
     apache_beam/io/gcp/internal/
+    # TODO(BEAM-4543): Remove datastore paths once they no longer exist.
+    apache_beam/io/gcp/datastore/v1/
+    apache_beam/io/gcp/datastore_write_it_*
     apache_beam/io/gcp/tests/
     apache_beam/metrics/execution.*
     apache_beam/runners/common.*
@@ -63,6 +66,7 @@ excluded_patterns=(
     apache_beam/runners/dataflow/internal/
     apache_beam/runners/portability/
     apache_beam/runners/worker/
+    apache_beam/testing/benchmarks/chicago_taxi/
     apache_beam/tools/map_fn_microbenchmark.*
     apache_beam/transforms/cy_combiners.*
     apache_beam/transforms/cy_dataflow_distribution_counter.*
@@ -72,6 +76,8 @@ excluded_patterns=(
     *_pb2.py
     *_test.py
     *_test_common.py
+    # TODO(BEAM-7847): Remove this once doc generation can parse Py3 syntax.
+    *_py3*.py
 )
 
 python $(type -p sphinx-apidoc) -fMeT -o target/docs/source apache_beam \
@@ -114,6 +120,7 @@ import apache_beam as beam
 intersphinx_mapping = {
   'python': ('https://docs.python.org/2', None),
   'hamcrest': ('https://pyhamcrest.readthedocs.io/en/stable/', None),
+  'google-cloud-datastore': ('https://googleapis.dev/python/datastore/latest/', None),
 }
 
 # Since private classes are skipped by sphinx, if there is any cross reference
@@ -141,6 +148,8 @@ ignore_identifiers = [
   'apache_beam.io._AvroSource',
   'apache_beam.io.gcp.bigquery.RowAsDictJsonCoder',
   'apache_beam.io.gcp.datastore.v1.datastoreio._Mutate',
+  'apache_beam.io.gcp.datastore.v1new.datastoreio._Mutate',
+  'apache_beam.io.gcp.datastore.v1new.datastoreio.DatastoreMutateFn',
   'apache_beam.io.gcp.internal.clients.bigquery.'
       'bigquery_v2_messages.TableSchema',
   'apache_beam.io.iobase.SourceBase',
@@ -148,6 +157,7 @@ ignore_identifiers = [
   'apache_beam.metrics.metric.MetricResults',
   'apache_beam.pipeline.PipelineVisitor',
   'apache_beam.pipeline.PTransformOverride',
+  'apache_beam.portability.api.schema_pb2.Schema',
   'apache_beam.pvalue.AsSideInput',
   'apache_beam.pvalue.DoOutputsTuple',
   'apache_beam.pvalue.PValue',
@@ -171,9 +181,13 @@ ignore_identifiers = [
   # DoFn param inner classes, due to a Sphinx misparsing of inner classes
   '_StateDoFnParam',
   '_TimerDoFnParam',
+  '_BundleFinalizerParam',
+  '_RestrictionDoFnParam',
+  '_WatermarkEstimatorParam',
 
   # Sphinx cannot find this py:class reference target
   'typing.Generic',
+  'concurrent.futures._base.Executor',
 ]
 
 # When inferring a base class it will use ':py:class'; if inferring a function
@@ -183,6 +197,17 @@ nitpick_ignore = []
 nitpick_ignore += [('py:class', iden) for iden in ignore_identifiers]
 nitpick_ignore += [('py:obj', iden) for iden in ignore_identifiers]
 nitpick_ignore += [('py:exc', 'ValueError')]
+
+# Monkey patch functools.wraps to retain original function argument signature
+# for documentation.
+# https://github.com/sphinx-doc/sphinx/issues/1711
+import functools
+def fake_wraps(wrapped):
+  def wrapper(decorator):
+    return wrapped
+  return wrapper
+
+functools.wraps = fake_wraps
 EOF
 
 #=== index.rst ===#

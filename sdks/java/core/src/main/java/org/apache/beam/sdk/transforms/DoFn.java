@@ -232,6 +232,7 @@ public abstract class DoFn<InputT, OutputT> implements Serializable, HasDisplayD
      * Returns the input element to be processed.
      *
      * <p>The element will not be changed -- it is safe to cache, etc. without copying.
+     * Implementation of {@link DoFn.ProcessElement} method should not mutate the element.
      */
     public abstract InputT element();
 
@@ -539,7 +540,7 @@ public abstract class DoFn<InputT, OutputT> implements Serializable, HasDisplayD
    * <p>The signature of this method must satisfy the following constraints:
    *
    * <ul>
-   *   <li>If one of its arguments is a subtype of {@link RestrictionTracker}, then it is a <a
+   *   <li>If one of its arguments is a {@link RestrictionTracker}, then it is a <a
    *       href="https://s.apache.org/splittable-do-fn">splittable</a> {@link DoFn} subject to the
    *       separate requirements described below. Items below are assuming this is not a splittable
    *       {@link DoFn}.
@@ -572,8 +573,8 @@ public abstract class DoFn<InputT, OutputT> implements Serializable, HasDisplayD
    * <h2>Splittable DoFn's</h2>
    *
    * <p>A {@link DoFn} is <i>splittable</i> if its {@link ProcessElement} method has a parameter
-   * whose type is a subtype of {@link RestrictionTracker}. This is an advanced feature and an
-   * overwhelming majority of users will never need to write a splittable {@link DoFn}.
+   * whose type is of {@link RestrictionTracker}. This is an advanced feature and an overwhelming
+   * majority of users will never need to write a splittable {@link DoFn}.
    *
    * <p>Not all runners support Splittable DoFn. See the <a
    * href="https://beam.apache.org/documentation/runners/capability-matrix/">capability matrix</a>.
@@ -585,13 +586,12 @@ public abstract class DoFn<InputT, OutputT> implements Serializable, HasDisplayD
    *
    * <ul>
    *   <li>It <i>must</i> define a {@link GetInitialRestriction} method.
+   *   <li>It <i>may</i> define a {@link GetSize} method.
    *   <li>It <i>may</i> define a {@link SplitRestriction} method.
-   *   <li>It <i>may</i> define a {@link NewTracker} method returning the same type as the type of
-   *       the {@link RestrictionTracker} argument of {@link ProcessElement}, which in turn must be
-   *       a subtype of {@code RestrictionTracker<R>} where {@code R} is the restriction type
-   *       returned by {@link GetInitialRestriction}. This method is optional in case the
-   *       restriction type returned by {@link GetInitialRestriction} implements {@link
-   *       HasDefaultTracker}.
+   *   <li>It <i>may</i> define a {@link NewTracker} method returning a subtype of {@code
+   *       RestrictionTracker<R>} where {@code R} is the restriction type returned by {@link
+   *       GetInitialRestriction}. This method is optional in case the restriction type returned by
+   *       {@link GetInitialRestriction} implements {@link HasDefaultTracker}.
    *   <li>It <i>may</i> define a {@link GetRestrictionCoder} method.
    *   <li>The type of restrictions used by all of these methods must be the same.
    *   <li>Its {@link ProcessElement} method <i>may</i> return a {@link ProcessContinuation} to
@@ -624,6 +624,14 @@ public abstract class DoFn<InputT, OutputT> implements Serializable, HasDisplayD
   @Target(ElementType.PARAMETER)
   public @interface Timestamp {}
 
+  /** Parameter annotation for the SideInput for a {@link ProcessElement} method. */
+  @Documented
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target(ElementType.PARAMETER)
+  public @interface SideInput {
+    /** The SideInput tag ID. */
+    String value();
+  }
   /**
    * <b><i>Experimental - no backwards compatibility guarantees. The exact name or usage of this
    * feature may change.</i></b>
@@ -725,6 +733,39 @@ public abstract class DoFn<InputT, OutputT> implements Serializable, HasDisplayD
   public @interface GetInitialRestriction {}
 
   /**
+   * Annotation for the method that returns the corresponding size for an element and restriction
+   * pair.
+   *
+   * <p>Signature: {@code double getSize(InputT element, RestrictionT restriction);}
+   *
+   * <p>Returns a double representing the size of the element and restriction.
+   *
+   * <p>Splittable {@link DoFn}s should only provide this method if the default implementation
+   * within the {@link RestrictionTracker} is an inaccurate representation of known work.
+   *
+   * <p>It is up to each splittable {@DoFn} to convert between their natural representation of
+   * outstanding work and this representation. For example:
+   *
+   * <ul>
+   *   <li>Block based file source (e.g. Avro): From the end of the current block, the remaining
+   *       number of bytes to the end of the restriction.
+   *   <li>Pull based queue based source (e.g. Pubsub): The local/global size available in number of
+   *       messages or number of {@code message bytes} that have not been processed.
+   *   <li>Key range based source (e.g. Shuffle, Bigtable, ...): Scale the start key to be one and
+   *       end key to be zero and interpolate the position of the next splittable key as the size.
+   *       If information about the probability density function or cumulative distribution function
+   *       is available, size interpolation can be improved. Alternatively, if the number of encoded
+   *       bytes for the keys and values is known for the key range, the number of remaining bytes
+   *       can be used.
+   * </ul>
+   */
+  @Documented
+  @Retention(RetentionPolicy.RUNTIME)
+  @Target(ElementType.METHOD)
+  @Experimental(Kind.SPLITTABLE_DO_FN)
+  public @interface GetSize {}
+
+  /**
    * Annotation for the method that returns the coder to use for the restriction of a <a
    * href="https://s.apache.org/splittable-do-fn">splittable</a> {@link DoFn}.
    *
@@ -746,11 +787,11 @@ public abstract class DoFn<InputT, OutputT> implements Serializable, HasDisplayD
    * href="https://s.apache.org/splittable-do-fn">splittable</a> {@link DoFn} into multiple parts to
    * be processed in parallel.
    *
-   * <p>Signature: {@code List<RestrictionT> splitRestriction( InputT element, RestrictionT
-   * restriction);}
+   * <p>Signature: {@code void splitRestriction(InputT element, RestrictionT restriction,
+   * OutputReceiver<RestrictionT> receiver);}
    *
    * <p>Optional: if this method is omitted, the restriction will not be split (equivalent to
-   * defining the method and returning {@code Collections.singletonList(restriction)}).
+   * defining the method and outputting the {@code restriction} unchanged).
    */
   // TODO: Make the InputT parameter optional.
   @Documented

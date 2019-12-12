@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-
 # cython: profile=True
 
 """Worker operations executor.
@@ -28,6 +27,14 @@ import traceback
 from builtins import next
 from builtins import object
 from builtins import zip
+from typing import TYPE_CHECKING
+from typing import Any
+from typing import Dict
+from typing import Iterable
+from typing import List
+from typing import Mapping
+from typing import Optional
+from typing import Tuple
 
 from future.utils import raise_with_traceback
 from past.builtins import unicode
@@ -44,19 +51,27 @@ from apache_beam.transforms.window import TimestampedValue
 from apache_beam.transforms.window import WindowFn
 from apache_beam.utils.counters import Counter
 from apache_beam.utils.counters import CounterName
+from apache_beam.utils.timestamp import Timestamp
 from apache_beam.utils.windowed_value import WindowedValue
+
+if TYPE_CHECKING:
+  from apache_beam.io import iobase
+  from apache_beam.transforms import sideinputs
+  from apache_beam.transforms.core import TimerSpec
 
 
 class NameContext(object):
   """Holds the name information for a step."""
 
-  def __init__(self, step_name):
+  def __init__(self, step_name, transform_id=None):
+    # type: (str, Optional[str]) -> None
     """Creates a new step NameContext.
 
     Args:
       step_name: The name of the step.
     """
     self.step_name = step_name
+    self.transform_id = transform_id
 
   def __eq__(self, other):
     return self.step_name == other.step_name
@@ -129,6 +144,7 @@ class Receiver(object):
   """
 
   def receive(self, windowed_value):
+    # type: (WindowedValue) -> None
     raise NotImplementedError
 
 
@@ -152,38 +168,64 @@ class MethodWrapper(object):
                        'a \'RestrictionProvider\'. Received %r instead.'
                        % obj_to_invoke)
 
-    fullargspec = core.get_function_arguments(
-        obj_to_invoke, method_name)
+    self.args, self.defaults = core.get_function_arguments(obj_to_invoke,
+                                                           method_name)
 
     # TODO(BEAM-5878) support kwonlyargs on Python 3.
-    args = fullargspec[0]
-    defaults = fullargspec[3]
-
-    defaults = defaults if defaults else []
-    method_value = getattr(obj_to_invoke, method_name)
-    self.method_value = method_value
-    self.args = args
-    self.defaults = defaults
+    self.method_value = getattr(obj_to_invoke, method_name)
 
     self.has_userstate_arguments = False
-    self.state_args_to_replace = {}
-    self.timer_args_to_replace = {}
-    for kw, v in zip(args[-len(defaults):], defaults):
+    self.state_args_to_replace = {}  # type: Dict[str, core.StateSpec]
+    self.timer_args_to_replace = {}  # type: Dict[str, core.TimerSpec]
+    self.timestamp_arg_name = None  # type: Optional[str]
+    self.window_arg_name = None  # type: Optional[str]
+    self.key_arg_name = None  # type: Optional[str]
+    self.restriction_provider = None
+    self.restriction_provider_arg_name = None
+    self.watermark_estimator = None
+    self.watermark_estimator_arg_name = None
+
+    for kw, v in zip(self.args[-len(self.defaults):], self.defaults):
       if isinstance(v, core.DoFn.StateParam):
         self.state_args_to_replace[kw] = v.state_spec
         self.has_userstate_arguments = True
       elif isinstance(v, core.DoFn.TimerParam):
         self.timer_args_to_replace[kw] = v.timer_spec
         self.has_userstate_arguments = True
+      elif core.DoFn.TimestampParam == v:
+        self.timestamp_arg_name = kw
+      elif core.DoFn.WindowParam == v:
+        self.window_arg_name = kw
+      elif core.DoFn.KeyParam == v:
+        self.key_arg_name = kw
+      elif isinstance(v, core.DoFn.RestrictionParam):
+        self.restriction_provider = v.restriction_provider
+        self.restriction_provider_arg_name = kw
+      elif isinstance(v, core.DoFn.WatermarkEstimatorParam):
+        self.watermark_estimator = v.watermark_estimator
+        self.watermark_estimator_arg_name = kw
 
-  def invoke_timer_callback(self, user_state_context, key, window):
-    # TODO(ccy): support WindowParam, TimestampParam and side inputs.
+  def invoke_timer_callback(self,
+                            user_state_context,
+                            key,
+                            window,
+                            timestamp):
+    # TODO(ccy): support side inputs.
+    kwargs = {}
     if self.has_userstate_arguments:
-      kwargs = {}
       for kw, state_spec in self.state_args_to_replace.items():
         kwargs[kw] = user_state_context.get_state(state_spec, key, window)
       for kw, timer_spec in self.timer_args_to_replace.items():
         kwargs[kw] = user_state_context.get_timer(timer_spec, key, window)
+
+    if self.timestamp_arg_name:
+      kwargs[self.timestamp_arg_name] = Timestamp(seconds=timestamp)
+    if self.window_arg_name:
+      kwargs[self.window_arg_name] = window
+    if self.key_arg_name:
+      kwargs[self.key_arg_name] = key
+
+    if kwargs:
       return self.method_value(**kwargs)
     else:
       return self.method_value()
@@ -202,6 +244,7 @@ class DoFnSignature(object):
   """
 
   def __init__(self, do_fn):
+    # type: (core.DoFn) -> None
     # We add a property here for all methods defined by Beam DoFn features.
 
     assert isinstance(do_fn, core.DoFn)
@@ -210,6 +253,8 @@ class DoFnSignature(object):
     self.process_method = MethodWrapper(do_fn, 'process')
     self.start_bundle_method = MethodWrapper(do_fn, 'start_bundle')
     self.finish_bundle_method = MethodWrapper(do_fn, 'finish_bundle')
+    self.setup_lifecycle_method = MethodWrapper(do_fn, 'setup')
+    self.teardown_lifecycle_method = MethodWrapper(do_fn, 'teardown')
 
     restriction_provider = self.get_restriction_provider()
     self.initial_restriction_method = (
@@ -229,7 +274,7 @@ class DoFnSignature(object):
 
     # Handle stateful DoFns.
     self._is_stateful_dofn = userstate.is_stateful_dofn(do_fn)
-    self.timer_methods = {}
+    self.timer_methods = {}  # type: Dict[TimerSpec, MethodWrapper]
     if self._is_stateful_dofn:
       # Populate timer firing methods, keyed by TimerSpec.
       _, all_timer_specs = userstate.get_dofn_specs(do_fn)
@@ -238,9 +283,11 @@ class DoFnSignature(object):
         self.timer_methods[timer_spec] = MethodWrapper(do_fn, method.__name__)
 
   def get_restriction_provider(self):
-    result = _find_param_with_default(self.process_method,
-                                      default_as_type=RestrictionProvider)
-    return result[1] if result else None
+    # type: () -> RestrictionProvider
+    return self.process_method.restriction_provider
+
+  def get_watermark_estimator(self):
+    return self.process_method.watermark_estimator
 
   def _validate(self):
     self._validate_process()
@@ -271,13 +318,15 @@ class DoFnSignature(object):
     userstate.validate_stateful_dofn(self.do_fn)
 
   def is_splittable_dofn(self):
-    return any([isinstance(default, RestrictionProvider) for default in
-                self.process_method.defaults])
+    # type: () -> bool
+    return self.get_restriction_provider() is not None
 
   def is_stateful_dofn(self):
+    # type: () -> bool
     return self._is_stateful_dofn
 
   def has_timers(self):
+    # type: () -> bool
     _, all_timer_specs = userstate.get_dofn_specs(self.do_fn)
     return bool(all_timer_specs)
 
@@ -288,18 +337,35 @@ class DoFnInvoker(object):
   A DoFnInvoker describes a particular way for invoking methods of a DoFn
   represented by a given DoFnSignature."""
 
-  def __init__(self, output_processor, signature):
+  def __init__(self,
+               output_processor,  # type: Optional[_OutputProcessor]
+               signature  # type: DoFnSignature
+              ):
+    # type: (...) -> None
+    """
+    Initializes `DoFnInvoker`
+
+    :param output_processor: an OutputProcessor for receiving elements produced
+                             by invoking functions of the DoFn.
+    :param signature: a DoFnSignature for the DoFn being invoked
+    """
     self.output_processor = output_processor
     self.signature = signature
-    self.user_state_context = None
+    self.user_state_context = None  # type: Optional[userstate.UserStateContext]
+    self.bundle_finalizer_param = None  # type: Optional[core._BundleFinalizerParam]
 
   @staticmethod
   def create_invoker(
-      signature,
-      output_processor=None,
-      context=None, side_inputs=None, input_args=None, input_kwargs=None,
+      signature,  # type: DoFnSignature
+      output_processor=None,  # type: Optional[_OutputProcessor]
+      context=None,  # type: Optional[DoFnContext]
+      side_inputs=None,   # type: Optional[List[sideinputs.SideInputMap]]
+      input_args=None, input_kwargs=None,
       process_invocation=True,
-      user_state_context=None):
+      user_state_context=None,  # type: Optional[userstate.UserStateContext]
+      bundle_finalizer_param=None  # type: Optional[core._BundleFinalizerParam]
+  ):
+    # type: (...) -> DoFnInvoker
     """ Creates a new DoFnInvoker based on given arguments.
 
     Args:
@@ -321,6 +387,8 @@ class DoFnInvoker(object):
                             method efficiently.
         user_state_context: The UserStateContext instance for the current
                             Stateful DoFn.
+        bundle_finalizer_param: The param that passed to a process method, which
+                                allows a callback to be registered.
     """
     side_inputs = side_inputs or []
     default_arg_values = signature.process_method.defaults
@@ -333,11 +401,16 @@ class DoFnInvoker(object):
       return PerWindowInvoker(
           output_processor,
           signature, context, side_inputs, input_args, input_kwargs,
-          user_state_context)
+          user_state_context, bundle_finalizer_param)
 
-  def invoke_process(self, windowed_value, restriction_tracker=None,
-                     output_processor=None,
-                     additional_args=None, additional_kwargs=None):
+  def invoke_process(self,
+                     windowed_value,  # type: WindowedValue
+                     restriction_tracker=None,  # type: Optional[iobase.RestrictionTracker]
+                     output_processor=None,  # type: Optional[OutputProcessor]
+                     additional_args=None,
+                     additional_kwargs=None
+                    ):
+    # type: (...) -> Optional[Tuple[WindowedValue, Timestamp]]
     """Invokes the DoFn.process() function.
 
     Args:
@@ -352,23 +425,37 @@ class DoFnInvoker(object):
     """
     raise NotImplementedError
 
+  def invoke_setup(self):
+    # type: () -> None
+    """Invokes the DoFn.setup() method
+    """
+    self.signature.setup_lifecycle_method.method_value()
+
   def invoke_start_bundle(self):
+    # type: () -> None
     """Invokes the DoFn.start_bundle() method.
     """
     self.output_processor.start_bundle_outputs(
         self.signature.start_bundle_method.method_value())
 
   def invoke_finish_bundle(self):
+    # type: () -> None
     """Invokes the DoFn.finish_bundle() method.
     """
     self.output_processor.finish_bundle_outputs(
         self.signature.finish_bundle_method.method_value())
 
+  def invoke_teardown(self):
+    # type: () -> None
+    """Invokes the DoFn.teardown() method
+    """
+    self.signature.teardown_lifecycle_method.method_value()
+
   def invoke_user_timer(self, timer_spec, key, window, timestamp):
     self.output_processor.process_outputs(
         WindowedValue(None, timestamp, (window,)),
         self.signature.timer_methods[timer_spec].invoke_timer_callback(
-            self.user_state_context, key, window))
+            self.user_state_context, key, window, timestamp))
 
   def invoke_split(self, element, restriction):
     return self.signature.split_method.method_value(element, restriction)
@@ -383,36 +470,25 @@ class DoFnInvoker(object):
     return self.signature.create_tracker_method.method_value(restriction)
 
 
-def _find_param_with_default(
-    method, default_as_value=None, default_as_type=None):
-  if ((default_as_value and default_as_type) or
-      not (default_as_value or default_as_type)):
-    raise ValueError(
-        'Exactly one of \'default_as_value\' and \'default_as_type\' should be '
-        'provided. Received %r and %r.' % (default_as_value, default_as_type))
-
-  defaults = method.defaults
-  ret = None
-  for i, value in enumerate(defaults):
-    if default_as_value and value == default_as_value:
-      ret = (method.args[len(method.args) - len(defaults) + i], value)
-    elif default_as_type and isinstance(value, default_as_type):
-      index = len(method.args) - len(defaults) + i
-      ret = (method.args[index], value)
-
-  return ret
-
-
 class SimpleInvoker(DoFnInvoker):
   """An invoker that processes elements ignoring windowing information."""
 
-  def __init__(self, output_processor, signature):
+  def __init__(self,
+               output_processor,  # type: Optional[_OutputProcessor]
+               signature  # type: DoFnSignature
+              ):
+    # type: (...) -> None
     super(SimpleInvoker, self).__init__(output_processor, signature)
     self.process_method = signature.process_method.method_value
 
-  def invoke_process(self, windowed_value, restriction_tracker=None,
-                     output_processor=None,
-                     additional_args=None, additional_kwargs=None):
+  def invoke_process(self,
+                     windowed_value,  # type: WindowedValue
+                     restriction_tracker=None,  # type: Optional[iobase.RestrictionTracker]
+                     output_processor=None,  # type: Optional[OutputProcessor]
+                     additional_args=None,
+                     additional_kwargs=None
+                    ):
+    # type: (...) -> None
     if not output_processor:
       output_processor = self.output_processor
     output_processor.process_outputs(
@@ -422,8 +498,16 @@ class SimpleInvoker(DoFnInvoker):
 class PerWindowInvoker(DoFnInvoker):
   """An invoker that processes elements considering windowing information."""
 
-  def __init__(self, output_processor, signature, context,
-               side_inputs, input_args, input_kwargs, user_state_context):
+  def __init__(self,
+               output_processor,  # type: Optional[_OutputProcessor]
+               signature,  # type: DoFnSignature
+               context,  # type: DoFnContext
+               side_inputs,  # type: Iterable[sideinputs.SideInputMap]
+               input_args,
+               input_kwargs,
+               user_state_context,  # type: Optional[userstate.UserStateContext]
+               bundle_finalizer_param  # type: Optional[core._BundleFinalizerParam]
+              ):
     super(PerWindowInvoker, self).__init__(output_processor, signature)
     self.side_inputs = side_inputs
     self.context = context
@@ -435,8 +519,14 @@ class PerWindowInvoker(DoFnInvoker):
         signature.is_stateful_dofn())
     self.user_state_context = user_state_context
     self.is_splittable = signature.is_splittable_dofn()
-    self.restriction_tracker = None
+    self.watermark_estimator = self.signature.get_watermark_estimator()
+    self.watermark_estimator_param = (
+        self.signature.process_method.watermark_estimator_arg_name
+        if self.watermark_estimator else None)
+    self.threadsafe_restriction_tracker = None
     self.current_windowed_value = None
+    self.bundle_finalizer_param = bundle_finalizer_param
+    self.is_key_param_required = False
 
     # Try to prepare all the arguments that can just be filled in
     # without any additional work. in the process function.
@@ -449,34 +539,42 @@ class PerWindowInvoker(DoFnInvoker):
     input_args = input_args if input_args else []
     input_kwargs = input_kwargs if input_kwargs else {}
 
-    arguments = signature.process_method.args
-    defaults = signature.process_method.defaults
+    arg_names = signature.process_method.args
 
     # Create placeholder for element parameter of DoFn.process() method.
-    self_in_args = int(signature.do_fn.is_process_bounded())
-
+    # Not to be confused with ArgumentPlaceHolder, which may be passed in
+    # input_args and is a placeholder for side-inputs.
     class ArgPlaceholder(object):
       def __init__(self, placeholder):
         self.placeholder = placeholder
 
     if core.DoFn.ElementParam not in default_arg_values:
-      args_to_pick = len(arguments) - len(default_arg_values) - 1 - self_in_args
+      # TODO(BEAM-7867): Handle cases in which len(arg_names) ==
+      #   len(default_arg_values).
+      args_to_pick = len(arg_names) - len(default_arg_values) - 1
+      # Positional argument values for process(), with placeholders for special
+      # values such as the element, timestamp, etc.
       args_with_placeholders = (
           [ArgPlaceholder(core.DoFn.ElementParam)] + input_args[:args_to_pick])
     else:
-      args_to_pick = len(arguments) - len(defaults) - self_in_args
+      args_to_pick = len(arg_names) - len(default_arg_values)
       args_with_placeholders = input_args[:args_to_pick]
 
-    # Fill the OtherPlaceholders for context, window or timestamp
+    # Fill the OtherPlaceholders for context, key, window or timestamp
     remaining_args_iter = iter(input_args[args_to_pick:])
-    for a, d in zip(arguments[-len(defaults):], defaults):
-      if d == core.DoFn.ElementParam:
+    for a, d in zip(arg_names[-len(default_arg_values):], default_arg_values):
+      if core.DoFn.ElementParam == d:
         args_with_placeholders.append(ArgPlaceholder(d))
-      elif d == core.DoFn.WindowParam:
+      elif core.DoFn.KeyParam == d:
+        self.is_key_param_required = True
         args_with_placeholders.append(ArgPlaceholder(d))
-      elif d == core.DoFn.TimestampParam:
+      elif core.DoFn.WindowParam == d:
         args_with_placeholders.append(ArgPlaceholder(d))
-      elif d == core.DoFn.SideInputParam:
+      elif core.DoFn.TimestampParam == d:
+        args_with_placeholders.append(ArgPlaceholder(d))
+      elif core.DoFn.PaneInfoParam == d:
+        args_with_placeholders.append(ArgPlaceholder(d))
+      elif core.DoFn.SideInputParam == d:
         # If no more args are present then the value must be passed via kwarg
         try:
           args_with_placeholders.append(next(remaining_args_iter))
@@ -486,6 +584,8 @@ class PerWindowInvoker(DoFnInvoker):
       elif isinstance(d, core.DoFn.StateParam):
         args_with_placeholders.append(ArgPlaceholder(d))
       elif isinstance(d, core.DoFn.TimerParam):
+        args_with_placeholders.append(ArgPlaceholder(d))
+      elif isinstance(d, type) and core.DoFn.BundleFinalizerParam == d:
         args_with_placeholders.append(ArgPlaceholder(d))
       else:
         # If no more args are present then the value must be passed via kwarg
@@ -503,9 +603,14 @@ class PerWindowInvoker(DoFnInvoker):
     self.args_for_process = args_with_placeholders
     self.kwargs_for_process = input_kwargs
 
-  def invoke_process(self, windowed_value, restriction_tracker=None,
-                     output_processor=None,
-                     additional_args=None, additional_kwargs=None):
+  def invoke_process(self,
+                     windowed_value,  # type: WindowedValue
+                     restriction_tracker=None,
+                     output_processor=None,  # type: Optional[OutputProcessor]
+                     additional_args=None,
+                     additional_kwargs=None
+                    ):
+    # type: (...) -> Optional[Tuple[WindowedValue, Timestamp]]
     if not additional_args:
       additional_args = []
     if not additional_kwargs:
@@ -528,36 +633,48 @@ class PerWindowInvoker(DoFnInvoker):
         # the upstream pair-with-restriction.
         raise NotImplementedError(
             'SDFs in multiply-windowed values with windowed arguments.')
-      restriction_tracker_param = _find_param_with_default(
-          self.signature.process_method,
-          default_as_type=core.RestrictionProvider)[0]
+      restriction_tracker_param = (
+          self.signature.process_method.restriction_provider_arg_name)
       if not restriction_tracker_param:
         raise ValueError(
             'A RestrictionTracker %r was provided but DoFn does not have a '
             'RestrictionTrackerParam defined' % restriction_tracker)
-      additional_kwargs[restriction_tracker_param] = restriction_tracker
+      from apache_beam.io import iobase
+      self.threadsafe_restriction_tracker = iobase.ThreadsafeRestrictionTracker(
+          restriction_tracker)
+      additional_kwargs[restriction_tracker_param] = (
+          iobase.RestrictionTrackerView(self.threadsafe_restriction_tracker))
+
+      if self.watermark_estimator:
+        # The watermark estimator needs to be reset for every element.
+        self.watermark_estimator.reset()
+        additional_kwargs[self.watermark_estimator_param] = (
+            self.watermark_estimator)
       try:
         self.current_windowed_value = windowed_value
-        self.restriction_tracker = restriction_tracker
-        return self._invoke_per_window(
+        return self._invoke_process_per_window(
             windowed_value, additional_args, additional_kwargs,
             output_processor)
       finally:
-        self.restriction_tracker = None
+        self.threadsafe_restriction_tracker = None
         self.current_windowed_value = windowed_value
 
     elif self.has_windowed_inputs and len(windowed_value.windows) != 1:
       for w in windowed_value.windows:
-        self._invoke_per_window(
+        self._invoke_process_per_window(
             WindowedValue(windowed_value.value, windowed_value.timestamp, (w,)),
             additional_args, additional_kwargs, output_processor)
     else:
-      self._invoke_per_window(
+      self._invoke_process_per_window(
           windowed_value, additional_args, additional_kwargs, output_processor)
 
-  def _invoke_per_window(
-      self, windowed_value, additional_args,
-      additional_kwargs, output_processor):
+  def _invoke_process_per_window(self,
+                                 windowed_value,  # type: WindowedValue
+                                 additional_args,
+                                 additional_kwargs,
+                                 output_processor  # type: OutputProcessor
+                                ):
+    # type: (...) -> Optional[Tuple[WindowedValue, Timestamp]]
     if self.has_windowed_inputs:
       window, = windowed_value.windows
       side_inputs = [si[window] for si in self.side_inputs]
@@ -586,28 +703,33 @@ class PerWindowInvoker(DoFnInvoker):
     # stateful DoFn, we set during __init__ self.has_windowed_inputs to be
     # True. Therefore, windows will be exploded coming into this method, and
     # we can rely on the window variable being set above.
-    if self.user_state_context:
+    if self.user_state_context or self.is_key_param_required:
       try:
         key, unused_value = windowed_value.value
       except (TypeError, ValueError):
         raise ValueError(
-            ('Input value to a stateful DoFn must be a KV tuple; instead, '
-             'got %s.') % (windowed_value.value,))
+            ('Input value to a stateful DoFn or KeyParam must be a KV tuple; '
+             'instead, got \'%s\'.') % (windowed_value.value,))
 
-    # TODO(sourabhbajaj): Investigate why we can't use `is` instead of ==
     for i, p in self.placeholders:
-      if p == core.DoFn.ElementParam:
+      if core.DoFn.ElementParam == p:
         args_for_process[i] = windowed_value.value
-      elif p == core.DoFn.WindowParam:
+      elif core.DoFn.KeyParam == p:
+        args_for_process[i] = key
+      elif core.DoFn.WindowParam == p:
         args_for_process[i] = window
-      elif p == core.DoFn.TimestampParam:
+      elif core.DoFn.TimestampParam == p:
         args_for_process[i] = windowed_value.timestamp
+      elif core.DoFn.PaneInfoParam == p:
+        args_for_process[i] = windowed_value.pane_info
       elif isinstance(p, core.DoFn.StateParam):
         args_for_process[i] = (
             self.user_state_context.get_state(p.state_spec, key, window))
       elif isinstance(p, core.DoFn.TimerParam):
         args_for_process[i] = (
             self.user_state_context.get_timer(p.timer_spec, key, window))
+      elif core.DoFn.BundleFinalizerParam == p:
+        args_for_process[i] = self.bundle_finalizer_param
 
     if additional_kwargs:
       if kwargs_for_process is None:
@@ -625,27 +747,52 @@ class PerWindowInvoker(DoFnInvoker):
           windowed_value, self.process_method(*args_for_process))
 
     if self.is_splittable:
-      deferred_status = self.restriction_tracker.deferred_status()
+      # TODO: Consider calling check_done right after SDF.Process() finishing.
+      # In order to do this, we need to know that current invoking dofn is
+      # ProcessSizedElementAndRestriction.
+      self.threadsafe_restriction_tracker.check_done()
+      deferred_status = self.threadsafe_restriction_tracker.deferred_status()
+      output_watermark = None
+      if self.watermark_estimator:
+        output_watermark = self.watermark_estimator.current_watermark()
       if deferred_status:
         deferred_restriction, deferred_watermark = deferred_status
-        return (
-            windowed_value.with_value(
-                (windowed_value.value, deferred_restriction)),
-            deferred_watermark)
+        element = windowed_value.value
+        size = self.signature.get_restriction_provider().restriction_size(
+            element, deferred_restriction)
+        return ((
+            windowed_value.with_value(((element, deferred_restriction), size)),
+            output_watermark), deferred_watermark)
 
   def try_split(self, fraction):
-    restriction_tracker = self.restriction_tracker
+    restriction_tracker = self.threadsafe_restriction_tracker
     current_windowed_value = self.current_windowed_value
     if restriction_tracker and current_windowed_value:
+      # Temporary workaround for [BEAM-7473]: get current_watermark before
+      # split, in case watermark gets advanced before getting split results.
+      # In worst case, current_watermark is always stale, which is ok.
+      if self.watermark_estimator:
+        current_watermark = self.watermark_estimator.current_watermark()
+      else:
+        current_watermark = None
       split = restriction_tracker.try_split(fraction)
       if split:
         primary, residual = split
         element = self.current_windowed_value.value
+        restriction_provider = self.signature.get_restriction_provider()
+        primary_size = restriction_provider.restriction_size(element, primary)
+        residual_size = restriction_provider.restriction_size(element, residual)
         return (
-            (self.current_windowed_value.with_value((element, primary)),
-             None),
-            (self.current_windowed_value.with_value((element, residual)),
-             restriction_tracker.current_watermark()))
+            ((self.current_windowed_value.with_value((
+                (element, primary), primary_size)), None), None),
+            ((self.current_windowed_value.with_value((
+                (element, residual), residual_size)), current_watermark), None))
+
+  def current_element_progress(self):
+    # type: () -> Optional[iobase.RestrictionProgress]
+    restriction_tracker = self.threadsafe_restriction_tracker
+    if restriction_tracker:
+      return restriction_tracker.current_progress()
 
 
 class DoFnRunner(Receiver):
@@ -655,18 +802,19 @@ class DoFnRunner(Receiver):
   """
 
   def __init__(self,
-               fn,
+               fn,  # type: core.DoFn
                args,
                kwargs,
-               side_inputs,
+               side_inputs,  # type: Iterable[sideinputs.SideInputMap]
                windowing,
-               tagged_receivers=None,
-               step_name=None,
+               tagged_receivers=None,  # type: Mapping[Optional[str], Receiver]
+               step_name=None,  # type: Optional[str]
                logging_context=None,
                state=None,
                scoped_metrics_container=None,
                operation_name=None,
-               user_state_context=None):
+               user_state_context=None  # type: Optional[userstate.UserStateContext]
+              ):
     """Initializes a DoFnRunner.
 
     Args:
@@ -689,6 +837,7 @@ class DoFnRunner(Receiver):
 
     self.step_name = step_name
     self.context = DoFnContext(step_name, state=state)
+    self.bundle_finalizer_param = DoFn.BundleFinalizerParam()
 
     do_fn_signature = DoFnSignature(fn)
 
@@ -717,19 +866,23 @@ class DoFnRunner(Receiver):
 
     self.do_fn_invoker = DoFnInvoker.create_invoker(
         do_fn_signature, output_processor, self.context, side_inputs, args,
-        kwargs, user_state_context=user_state_context)
+        kwargs, user_state_context=user_state_context,
+        bundle_finalizer_param=self.bundle_finalizer_param)
 
   def receive(self, windowed_value):
+    # type: (WindowedValue) -> None
     self.process(windowed_value)
 
   def process(self, windowed_value):
+    # type: (WindowedValue) -> Optional[Tuple[WindowedValue, Timestamp]]
     try:
       return self.do_fn_invoker.invoke_process(windowed_value)
     except BaseException as exn:
       self._reraise_augmented(exn)
 
-  def process_with_restriction(self, windowed_value):
-    element, restriction = windowed_value.value
+  def process_with_sized_restriction(self, windowed_value):
+    # type: (WindowedValue) -> Optional[Tuple[WindowedValue, Timestamp]]
+    (element, restriction), _ = windowed_value.value
     return self.do_fn_invoker.invoke_process(
         windowed_value.with_value(element),
         restriction_tracker=self.do_fn_invoker.invoke_create_tracker(
@@ -737,6 +890,10 @@ class DoFnRunner(Receiver):
 
   def try_split(self, fraction):
     return self.do_fn_invoker.try_split(fraction)
+
+  def current_element_progress(self):
+    # type: () -> Optional[iobase.RestrictionProgress]
+    return self.do_fn_invoker.current_element_progress()
 
   def process_user_timer(self, timer_spec, key, window, timestamp):
     try:
@@ -751,11 +908,27 @@ class DoFnRunner(Receiver):
     except BaseException as exn:
       self._reraise_augmented(exn)
 
+  def _invoke_lifecycle_method(self, lifecycle_method):
+    try:
+      self.context.set_element(None)
+      lifecycle_method()
+    except BaseException as exn:
+      self._reraise_augmented(exn)
+
+  def setup(self):
+    self._invoke_lifecycle_method(self.do_fn_invoker.invoke_setup)
+
   def start(self):
     self._invoke_bundle_method(self.do_fn_invoker.invoke_start_bundle)
 
   def finish(self):
     self._invoke_bundle_method(self.do_fn_invoker.invoke_finish_bundle)
+
+  def teardown(self):
+    self._invoke_lifecycle_method(self.do_fn_invoker.invoke_teardown)
+
+  def finalize(self):
+    self.bundle_finalizer_param.finalize_bundle()
 
   def _reraise_augmented(self, exn):
     if getattr(exn, '_tagged_with_step', False) or not self.step_name:
@@ -780,6 +953,7 @@ class DoFnRunner(Receiver):
 class OutputProcessor(object):
 
   def process_outputs(self, windowed_input_element, results):
+    # type: (WindowedValue, Iterable[Any]) -> None
     raise NotImplementedError
 
 
@@ -788,8 +962,8 @@ class _OutputProcessor(OutputProcessor):
 
   def __init__(self,
                window_fn,
-               main_receivers,
-               tagged_receivers,
+               main_receivers,  # type: Receiver
+               tagged_receivers,  # type: Mapping[Optional[str], Receiver]
                per_element_output_counter):
     """Initializes ``_OutputProcessor``.
 
@@ -806,6 +980,7 @@ class _OutputProcessor(OutputProcessor):
     self.per_element_output_counter = per_element_output_counter
 
   def process_outputs(self, windowed_input_element, results):
+    # type: (WindowedValue, Iterable[Any]) -> None
     """Dispatch the result of process computation to the appropriate receivers.
 
     A value wrapped in a TaggedOutput object will be unwrapped and
@@ -936,6 +1111,7 @@ class DoFnContext(object):
       self.set_element(element)
 
   def set_element(self, windowed_value):
+    # type: (Optional[WindowedValue]) -> None
     self.windowed_value = windowed_value
 
   @property

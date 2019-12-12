@@ -19,9 +19,10 @@ package org.apache.beam.runners.dataflow;
 
 import static org.apache.beam.runners.core.construction.PTransformTranslation.PAR_DO_TRANSFORM_URN;
 import static org.apache.beam.runners.core.construction.ParDoTranslation.translateTimerSpec;
+import static org.apache.beam.sdk.options.ExperimentalOptions.hasExperiment;
 import static org.apache.beam.sdk.transforms.reflect.DoFnSignatures.getStateSpecOrThrow;
 import static org.apache.beam.sdk.transforms.reflect.DoFnSignatures.getTimerSpecOrThrow;
-import static org.apache.beam.vendor.guava.v20_0.com.google.common.base.Preconditions.checkArgument;
+import static org.apache.beam.vendor.guava.v26_0_jre.com.google.common.base.Preconditions.checkArgument;
 
 import com.google.auto.service.AutoService;
 import java.io.IOException;
@@ -48,6 +49,7 @@ import org.apache.beam.sdk.transforms.DoFnSchemaInformation;
 import org.apache.beam.sdk.transforms.PTransform;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.ParDo.SingleOutput;
+import org.apache.beam.sdk.transforms.reflect.DoFnInvokers;
 import org.apache.beam.sdk.transforms.reflect.DoFnSignature;
 import org.apache.beam.sdk.transforms.reflect.DoFnSignatures;
 import org.apache.beam.sdk.values.PCollection;
@@ -55,8 +57,8 @@ import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.sdk.values.PCollectionViews;
 import org.apache.beam.sdk.values.PValue;
 import org.apache.beam.sdk.values.TupleTag;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Iterables;
-import org.apache.beam.vendor.guava.v20_0.com.google.common.collect.Sets;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Iterables;
+import org.apache.beam.vendor.guava.v26_0_jre.com.google.common.collect.Sets;
 
 /**
  * A {@link PTransformOverrideFactory} that produces {@link ParDoSingle} instances from {@link
@@ -116,13 +118,13 @@ public class PrimitiveParDoSingleFactory<InputT, OutputT>
       return onlyOutputTag;
     }
 
-    public List<PCollectionView<?>> getSideInputs() {
+    public Map<String, PCollectionView<?>> getSideInputs() {
       return original.getSideInputs();
     }
 
     @Override
     public Map<TupleTag<?>, PValue> getAdditionalInputs() {
-      return PCollectionViews.toAdditionalInputs(getSideInputs());
+      return PCollectionViews.toAdditionalInputs(getSideInputs().values());
     }
 
     @Override
@@ -163,17 +165,20 @@ public class PrimitiveParDoSingleFactory<InputT, OutputT>
       final ParDoSingle<?, ?> parDo = transform.getTransform();
       final DoFn<?, ?> doFn = parDo.getFn();
       final DoFnSignature signature = DoFnSignatures.getSignature(doFn.getClass());
-      checkArgument(
-          !signature.processElement().isSplittable(),
-          String.format(
-              "Not expecting a splittable %s: should have been overridden",
-              ParDoSingle.class.getSimpleName()));
+
+      if (!hasExperiment(transform.getPipeline().getOptions(), "beam_fn_api")) {
+        checkArgument(
+            !signature.processElement().isSplittable(),
+            String.format(
+                "Not expecting a splittable %s: should have been overridden",
+                ParDoSingle.class.getSimpleName()));
+      }
 
       // TODO: Is there a better way to do this?
       Set<String> allInputs =
           transform.getInputs().keySet().stream().map(TupleTag::getId).collect(Collectors.toSet());
       Set<String> sideInputs =
-          parDo.getSideInputs().stream()
+          parDo.getSideInputs().values().stream()
               .map(s -> s.getTagInternal().getId())
               .collect(Collectors.toSet());
       Set<String> timerInputs = signature.timerDeclarations().keySet();
@@ -190,7 +195,11 @@ public class PrimitiveParDoSingleFactory<InputT, OutputT>
             @Override
             public RunnerApi.SdkFunctionSpec translateDoFn(SdkComponents newComponents) {
               return ParDoTranslation.translateDoFn(
-                  parDo.getFn(), parDo.getMainOutputTag(), doFnSchemaInformation, newComponents);
+                  parDo.getFn(),
+                  parDo.getMainOutputTag(),
+                  parDo.getSideInputs(),
+                  doFnSchemaInformation,
+                  newComponents);
             }
 
             @Override
@@ -201,7 +210,8 @@ public class PrimitiveParDoSingleFactory<InputT, OutputT>
 
             @Override
             public Map<String, RunnerApi.SideInput> translateSideInputs(SdkComponents components) {
-              return ParDoTranslation.translateSideInputs(parDo.getSideInputs(), components);
+              return ParDoTranslation.translateSideInputs(
+                  parDo.getSideInputs().values().stream().collect(Collectors.toList()), components);
             }
 
             @Override
@@ -233,11 +243,24 @@ public class PrimitiveParDoSingleFactory<InputT, OutputT>
 
             @Override
             public boolean isSplittable() {
-              return false;
+              return signature.processElement().isSplittable();
             }
 
             @Override
             public String translateRestrictionCoderId(SdkComponents newComponents) {
+              if (signature.processElement().isSplittable()) {
+                Coder<?> restrictionCoder =
+                    DoFnInvokers.invokerFor(doFn)
+                        .invokeGetRestrictionCoder(transform.getPipeline().getCoderRegistry());
+                try {
+                  return newComponents.registerCoder(restrictionCoder);
+                } catch (IOException e) {
+                  throw new IllegalStateException(
+                      String.format(
+                          "Unable to register restriction coder for %s.", transform.getFullName()),
+                      e);
+                }
+              }
               return "";
             }
           },
