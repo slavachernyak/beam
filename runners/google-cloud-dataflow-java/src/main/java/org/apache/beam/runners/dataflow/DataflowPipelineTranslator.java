@@ -74,6 +74,7 @@ import org.apache.beam.sdk.coders.Coder;
 import org.apache.beam.sdk.coders.IterableCoder;
 import org.apache.beam.sdk.extensions.gcp.options.GcpOptions;
 import org.apache.beam.sdk.io.Read;
+import org.apache.beam.sdk.io.gcp.bigquery.BigQueryOptions;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.StreamingOptions;
 import org.apache.beam.sdk.runners.AppliedPTransform;
@@ -428,6 +429,25 @@ public class DataflowPipelineTranslator {
       }
       if (options.getDataflowKmsKey() != null) {
         environment.setServiceKmsKeyName(options.getDataflowKmsKey());
+      }
+
+      if (options.isStreaming()) {
+        BigQueryOptions bq = options.as(BigQueryOptions.class);
+        if (bq.getNumStreamingKeys() == 0) {
+          // If number of streaming keys is un-set, auto adjust relevant values to increase
+          // parallelism and batching for BigQuery inserts.
+
+          // Number of workers or max workers may be un-set.
+          int effectiveWorkers = Math.max(options.getMaxNumWorkers(), options.getNumWorkers());
+          int deducedKeys = Math.max(effectiveWorkers * 4 /* typical CPU-per-worker */,
+                  BigQueryOptions.DEFAULT_FALLBACK_NUM_STREAMING_KEYS);
+          LOG.info("Setting BigQuery insert parallelism to {}", deducedKeys);
+          bq.setNumStreamingKeys(deducedKeys);
+
+          // Override additional parameters for better batching, but only if using BigQuery with Dataflow Runner.
+          bq.setMaxStreamingRowsToBatch(2000L);
+          bq.setMaxStreamingBatchSize(1024L * 1024L);
+        }
       }
 
       pipeline.traverseTopologically(this);

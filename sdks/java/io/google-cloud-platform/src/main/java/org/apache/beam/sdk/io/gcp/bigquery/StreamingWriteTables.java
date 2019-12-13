@@ -192,6 +192,9 @@ public class StreamingWriteTables<ElementT>
       ErrorContainer<T> errorContainer) {
     BigQueryOptions options = input.getPipeline().getOptions().as(BigQueryOptions.class);
     int numShards = options.getNumStreamingKeys();
+    if (numShards == 0) {
+      numShards = BigQueryOptions.DEFAULT_FALLBACK_NUM_STREAMING_KEYS;
+    }
 
     // A naive implementation would be to simply stream data directly to BigQuery.
     // However, this could occasionally lead to duplicated data, e.g., when

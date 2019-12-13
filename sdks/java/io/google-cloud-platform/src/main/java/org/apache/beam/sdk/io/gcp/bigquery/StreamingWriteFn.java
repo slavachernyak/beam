@@ -20,9 +20,8 @@ package org.apache.beam.sdk.io.gcp.bigquery;
 import com.google.api.services.bigquery.model.TableReference;
 import com.google.api.services.bigquery.model.TableRow;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+
 import org.apache.beam.sdk.metrics.Counter;
 import org.apache.beam.sdk.metrics.SinkMetrics;
 import org.apache.beam.sdk.transforms.DoFn;
@@ -57,8 +56,7 @@ class StreamingWriteFn<ErrorT, ElementT>
   /** The list of unique ids for each BigQuery table row. */
   private transient Map<String, List<String>> uniqueIdsForTableRows;
 
-  /** Tracks bytes written, exposed as "ByteCount" Counter. */
-  private Counter byteCounter = SinkMetrics.bytesWritten();
+  private transient OpTracker tracker = new OpTracker();
 
   StreamingWriteFn(
       BigQueryServices bqServices,
@@ -124,6 +122,62 @@ class StreamingWriteFn<ErrorT, ElementT>
     }
   }
 
+  /** Tracks operation counts, latencies, and bytes, for individual operations. Since its not always possible to compute
+   * rates value for counters, we maintain some basic rates in OpTracker.
+   */
+  private class OpTracker {
+    final class OpBucket {
+      long opCount;
+      long opCount1s;
+      long opCount10s;
+      long opCount30s;
+      long bytes;
+    };
+    SortedMap<Long /* ts bucket */, OpBucket> opBuckets = new TreeMap<>();
+    long latestTimestampMillis = 0L;
+
+    public synchronized void addOp(long timestampMillis, long latencyMillis, long totalBytes) {
+      // Use 5 second buckets to keep a 60-second sliding window.
+      long bucketKey = (timestampMillis / 5) * 5;
+      OpBucket bucket = opBuckets.get(bucketKey);
+      bucket.opCount++;
+      if (latencyMillis > 1e3) {
+        bucket.opCount1s++;
+      }
+      if (latencyMillis > 1e4) {
+        bucket.opCount10s++;
+      }
+      if (latencyMillis > 3e4) {
+        bucket.opCount30s++;
+      }
+      bucket.bytes += totalBytes;
+      latestTimestampMillis = Math.max(latestTimestampMillis, timestampMillis);
+      updateCounters(totalBytes);
+    }
+
+    private void updateCounters(long totalBytes) {
+      // Retain only the last 60 sec.
+      opBuckets.entrySet().removeIf(e->e.getKey()<latestTimestampMillis-60e3);
+      // Compute totals
+      OpBucket totals = new OpBucket();
+      opBuckets.forEach((k, v)-> {
+        totals.opCount += v.opCount;
+        totals.opCount1s += v.opCount1s;
+        totals.opCount10s += v.opCount10s;
+        totals.opCount30s += v.opCount30s;
+        totals.bytes += v.bytes;
+      });
+
+      SinkMetrics.writeOpsRate60s().set(totals.opCount);
+      SinkMetrics.writeOpsRate60sWithLatencyGt1s().set(totals.opCount1s);
+      SinkMetrics.writeOpsRate60sWithLatencyGt10s().set(totals.opCount10s);
+      SinkMetrics.writeOpsRate60sWithLatencyGt30s().set(totals.opCount30s);
+      SinkMetrics.bytesWrittenRate60s().set(totals.bytes);
+
+      SinkMetrics.bytesWritten().inc(totalBytes);
+    }
+  }
+
   /** Writes the accumulated rows into BigQuery with streaming API. */
   private void flushRows(
       TableReference tableReference,
@@ -134,6 +188,7 @@ class StreamingWriteFn<ErrorT, ElementT>
       throws InterruptedException {
     if (!tableRows.isEmpty()) {
       try {
+        long startTime = System.currentTimeMillis();
         long totalBytes =
             bqServices
                 .getDatasetService(options)
@@ -146,7 +201,8 @@ class StreamingWriteFn<ErrorT, ElementT>
                     errorContainer,
                     skipInvalidRows,
                     ignoreUnknownValues);
-        byteCounter.inc(totalBytes);
+        long finishTime = System.currentTimeMillis();
+        tracker.addOp(finishTime - startTime, finishTime, totalBytes);
       } catch (IOException e) {
         throw new RuntimeException(e);
       }
